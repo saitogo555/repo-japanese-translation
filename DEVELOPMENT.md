@@ -1,48 +1,51 @@
-# REPO Japanese Language Mod — 開発手順ドキュメント
+# REPO Japanese Translation Mod — 開発メモ
 
-このドキュメントは、R.E.P.O. 向け日本語化Mod「REPO Japanese Language」を開発した際の
-調査手順・技術的判断・ファイル構成をまとめたものです。
+このドキュメントは、R.E.P.O. 向け日本語化Mod「REPO Japanese Translation」を開発した際の
+調査内容、実装方針、ファイル構成、ビルド手順を整理したものです。
+
+本Modでは、ゲーム内UIテキストの日本語化と、日本語表示に必要なフォント対応を行っています。
 
 ## 目次
 
 1. [プロジェクト概要](#1-プロジェクト概要)
-2. [解析したファイル](#2-解析したファイル)
-3. [ゲームのテキスト表示構造の調査](#3-ゲームのテキスト表示構造の調査)
+2. [調査対象ファイル](#2-調査対象ファイル)
+3. [テキスト表示の調査](#3-テキスト表示の調査)
 4. [翻訳システムの設計](#4-翻訳システムの設計)
-5. [フォントシステムの調査と修正](#5-フォントシステムの調査と修正)
+5. [フォント処理の調査と対応](#5-フォント処理の調査と対応)
 6. [翻訳エントリの収集方法](#6-翻訳エントリの収集方法)
-7. [詰まったポイントと解決策](#7-詰まったポイントと解決策)
+7. [詰まった点と対応内容](#7-詰まった点と対応内容)
 8. [ファイル構成](#8-ファイル構成)
-9. [ビルドとデプロイ手順](#9-ビルドとデプロイ手順)
+9. [ビルドとデプロイ](#9-ビルドとデプロイ)
 
 ## 1. プロジェクト概要
 
 | 項目 | 内容 |
-|||
+|---|---|
 | ゲーム | R.E.P.O. (Steam App ID: 3241660) |
 | Unity バージョン | 2022.3.67f2 |
 | BepInEx | 5.4.23.5 |
 | REPOLib | 4.0.0 |
 | TextMeshPro | 3.0.7 |
-| 翻訳エントリ数 | 648+ |
+| 翻訳エントリ数 | 647件 |
 
-## 2. 解析したファイル
+## 2. 調査対象ファイル
 
 ### ゲームインストールフォルダ構造
 
-```
-G:\Steam\steamapps\common\REPO\
+以下はインストール先の例です。環境によってディレクトリ構成は異なるため、実際のゲーム保存先に読み替えてください。
+
+```text
+<GAME_INSTALL_DIR>\
 ├── REPO.exe
 ├── REPO_Data\
 │   ├── Managed\
-│   │   ├── Assembly-CSharp.dll          ← ゲーム本体のC#コード
-│   │   ├── Unity.TextMeshPro.dll        ← TMPro テキストレンダリング
+│   │   ├── Assembly-CSharp.dll
+│   │   ├── Unity.TextMeshPro.dll
 │   │   └── UnityEngine.*.dll
 │   └── StreamingAssets\
 │       └── aa\
 │           └── StandaloneWindows64\
 │               ├── localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle
-│               │                          ← ★ ゲームの全UIテキストが入ったバンドル
 │               └── *.bundle
 └── BepInEx\
     └── plugins\
@@ -52,28 +55,36 @@ G:\Steam\steamapps\common\REPO\
                 └── NotoSansJP-Regular-subset.ttf
 ```
 
-### 解析した主要ファイル
+### 主要ファイル
 
 #### `Assembly-CSharp.dll`
-- ゲーム本体のC#コードが入ったDLL
-- `strings` コマンドで文字列を抽出し、UIに使われているクラス名・メソッド名を特定
-- 重要クラスの発見:
-  - `LocalizationManager` — ゲーム自身のローカライゼーション管理クラス（**クラス名衝突に注意**）
-  - `TMP_Text` — TextMeshProのテキストコンポーネント
-  - セーブ/ロード関係の文字列
+- ゲーム本体の C# コードが含まれる DLL
+- `strings` コマンドで文字列を抽出し、UI 関連のクラス名やメソッド名を調査
+- 調査中に確認できた主なクラス・要素:
+  - `LocalizationManager` — ゲーム側のローカライズ管理クラス
+  - `TMP_Text` — TextMeshPro のテキストコンポーネント
+  - セーブ / ロード関連の文字列群
 
 ```bash
-# 解析コマンド例
 strings REPO_Data/Managed/Assembly-CSharp.dll | grep -i "locali\|translate\|toupper"
 ```
 
 #### `localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle`
-- R.E.P.O. がゲーム内UIテキストを Unity Localization パッケージで管理していることを発見
-- **UnityFS形式**、LZ4HC圧縮
-- 400+ の英語UIテキストが収録されている
-- Pythonスクリプトで手動デコードして全テキストを抽出 → `ja.json` の翻訳元にした
+- UI テキストが Unity Localization ベースで管理されていることを確認
+- 形式は UnityFS、圧縮は LZ4HC
+- 英語 UI テキストを多数収録
+- Python スクリプトで手動展開し、翻訳元データを抽出して `ja.json` 作成に利用
 
-```
+#### `BepInEx/LogOutput.log`
+- プラグイン起動ログと `LogUntranslated` の出力先
+- 現在の翻訳エントリ数や、実プレイ時の未翻訳文字列の確認に使用
+
+#### `BepInEx/config/ja/Text/TranslationJP_Upgrade.txt`
+- 旧 xUnity AutoTranslator ベースの翻訳ダンプ
+- マップのアップグレード一覧が逐次追記された複数行文字列として再描画されている痕跡を確認する補助資料
+- 例: `体力 STAMINA=体力\nスタミナ`
+
+```text
 バンドル構造:
 magic(8B) + format_ver(4B) + unity_ver(可変) + unity_rev(可変)
 + bundle_size(8B) + ci_size(4B) + ui_size(4B) + flags(4B)
@@ -82,44 +93,41 @@ magic(8B) + format_ver(4B) + unity_ver(可変) + unity_rev(可変)
 → データブロック: LZ4HCで圧縮 (flags & 0x3f == 3)
 ```
 
-## 3. ゲームのテキスト表示構造の調査
+## 3. テキスト表示の調査
 
-### TextMeshPro (TMP) の使用確認
+### TextMeshPro の使用
 
-R.E.P.O. は全UIテキストに **TextMeshPro (TMP)** を使用している。  
-TMP テキストコンポーネントの `text` プロパティ セッターが全テキスト変更の窓口になっている。
+調査した範囲では、R.E.P.O. の UI テキスト表示には TextMeshPro 系コンポーネントが使われていました。
+
+また、主要なテキスト更新は `TMP_Text.text` セッター経由で反映されており、翻訳処理の差し込みポイントとして扱いやすいことを確認しました。
 
 ```csharp
-// TMP_Text.text setter が呼ばれるたびにテキストが更新される
 someLabel.text = "Settings";
 ```
 
-### Unity Localization パッケージの確認
+### Unity Localization の利用
 
-ゲームは **Unity の Localization パッケージ** (`com.unity.localization`) を使用して、
-文字列テーブル (`StringTable`) をAddressable Assetsとして配布している。
+ゲームでは Unity Localization パッケージ由来と見られる文字列テーブルが使われており、
+`Game_en-US`、`HUD_en-US`、`Menu_en-US` などのテーブルを確認しました。
 
-- バンドルに `Game_en-US`、`HUD_en-US`、`Menu_en-US` の3テーブルが存在
-- ランタイムに `LocalizeStringEvent` コンポーネントがTMPコンポーネントを更新する
+調査した挙動では、ローカライズ結果は最終的に TextMeshPro 側のテキスト更新へ反映されていました。
 
-### ToUpper() 問題
+### 大文字化による不一致
 
-一部のUIテキスト（`< GO BACK`、`(CLICK TO RENAME)` 等）はゲーム内で
-`.ToUpper()` してからTMPに設定されていることを確認。
+一部の UI テキストは、ゲーム側で `.ToUpper()` を適用した後に表示されていました。
+
+そのため、ロケールデータ内の原文が `"< Go Back"` であっても、
+実際の表示時には `"< GO BACK"` となり、単純な完全一致では翻訳に失敗するケースがありました。
 
 ```bash
 strings Assembly-CSharp.dll | grep -i "toupper"
-# → "ToUpper" が存在することを確認
 ```
-
-ロケールバンドルでは `"< Go Back"` として保存されているが、
-実際にTMPに設定されるのは `"< GO BACK"` という大文字形式。
 
 ## 4. 翻訳システムの設計
 
-### アーキテクチャ
+### 基本構成
 
-```
+```text
 [ゲームコード]
     ↓ someLabel.text = "Settings"
 [Harmony Prefix Patch on TMP_Text.text setter]
@@ -129,24 +137,42 @@ strings Assembly-CSharp.dll | grep -i "toupper"
     ↓ 日本語で表示
 ```
 
-### TranslationManager の仕組み
+### `TranslationManager` の役割
 
 `src/REPOJapaneseTranslation/Localization/TranslationManager.cs`
 
-1. **起動時**: 組み込みリソース `translations/ja.json` を読み込む
-2. **登録時**: 原文キーに加えて、正規化後に `.ToUpperInvariant()` したキーも保持する
-3. **翻訳時**: 3段階のフォールバック検索
-   - ① 完全一致 (Ordinal)
-   - ② 改行正規化後に完全一致
-   - ③ 大文字化キーで一致（ToUpper問題への対処）
+起動時に組み込みリソース `translations/ja.json` を読み込み、
+原文キーと正規化済みキーを辞書として保持します。現在は通常の辞書検索に加えて、
+実行時に組み立てられる文字列にも対応するための補助ロジックを持っています。
+
+翻訳時は、次の順でフォールバック検索を行います。
+
+1. 完全一致
+2. 改行正規化後の一致
+3. 大文字化したキーでの一致
+4. プレースホルダ付きテンプレートの一致
+5. 末尾の操作ヒント付き表示の本体翻訳
+6. 複数行ブロックの行単位翻訳
+7. 全大文字の複合語列を既知語へ分解して翻訳
 
 ```csharp
-string normalized = text.Replace("\r\n", "\n").Trim();
-string upperNormalized = normalized.ToUpperInvariant();
+if (TryTranslateLookup(text, out result)) return result;
+if (TryTranslateTemplate(text, out result)) return result;
+if (TryTranslateActionSuffix(text, out result)) return result;
+if (TryTranslatePhraseSequence(text, out result)) return result;
+```
 
-if (_translations.TryGetValue(text, out translated)) return translated;
-if (normalized != text && _translations.TryGetValue(normalized, out translated)) return translated;
-if (_translationsUpper.TryGetValue(upperNormalized, out translated)) return translated;
+プレースホルダ付きテンプレートは、`Hold to Reroll ({cost})` のような辞書キーから
+正規表現テンプレートを作り、実表示の `HOLD TO REROLL (-$5K)` のような値入り文字列にも一致させます。
+
+また、`Medium Health Pack (50) [E]` のようなアイテム名と操作ヒントの結合文字列、
+`1 CROUCH REST HEALTH` のようなマップ上のアップグレード一覧も翻訳対象に含めています。
+
+```csharp
+private static readonly Regex s_placeholderTokenRegex = new(@"\{[^{}]+\}|\[[^\[\]]+\]");
+private static readonly Regex s_actionSuffixRegex = new(
+    @"^(?<body>.+?)(?<suffix>\s*(?:<[^>]+>)*\[[^\[\]]+\](?:</[^>]+>)*\s*)$"
+);
 ```
 
 ### Harmony パッチ
@@ -163,26 +189,28 @@ private static void TranslateText(ref string value)
 }
 ```
 
-**なぜ `text` セッターをパッチするか**:  
-Unity Localization の `LocalizeStringEvent` も最終的に `TMP_Text.text = ...` を呼ぶため、
-ここを一箇所パッチするだけで全テキスト変更をインターセプトできる。
+`TMP_Text.text` セッターを主なパッチ地点にすることで、
+調査範囲で確認できた主要な UI テキスト更新をまとめて捕捉できました。
 
-## 5. フォントシステムの調査と修正
+## 5. フォント処理の調査と対応
 
-### 問題: 同梱 TTF から TMP_FontAsset を安定して生成したい
+### 問題
 
-`TMP_FontAsset.CreateFontAsset(Font)` は内部で `FontEngine.LoadFontFace(Font, int)` を呼ぶため、
-単純にダミーの `Font` を渡すだけではフォントバイト列に辿れず失敗することがある。
+同梱した TTF ファイルから、TextMeshPro 用の `TMP_FontAsset` を安定して生成する必要がありました。
 
-**原因の特定**:
-- 日本語フォントは `fonts/NotoSansJP-Regular-subset.ttf` としてプラグインに同梱している
-- `TMP_FontAsset.CreateFontAsset(Font)` は `Font` インスタンスからフォントデータを直接引けないと失敗する
-- 動的グリフ追加時も同じ `LoadFontFace(Font, int)` 経路が再利用される
+しかし、`TMP_FontAsset.CreateFontAsset(Font)` は内部で `FontEngine.LoadFontFace(Font, int)` を利用するため、
+ダミーの `Font` を渡すだけではフォント実体に到達できず、生成に失敗するケースがありました。
 
-### 解決策: ダミー Font を TTF バイト列にリダイレクト
+### 原因
 
-TTF をバイト列で読み込み、ダミー `Font` と対応付けてから
-`FontEngine.LoadFontFace(Font, int)` を `LoadFontFace(byte[], int)` にリダイレクトする。
+- 日本語フォントは `fonts/NotoSansJP-Regular-subset.ttf` として同梱
+- `CreateFontAsset(Font)` は `Font` インスタンスからフォントデータを解決できないと失敗する
+- 動的グリフ追加時も同じ経路が再利用される
+
+### 対応方法
+
+TTF をバイト列として読み込み、ダミー `Font` と関連付けたうえで、
+`FontEngine.LoadFontFace(Font, int)` を `LoadFontFace(byte[], int)` にリダイレクトしました。
 
 ```csharp
 private static bool Prefix(Font font, int pointSize, ref FontEngineError __result)
@@ -195,184 +223,270 @@ private static bool Prefix(Font font, int pointSize, ref FontEngineError __resul
 }
 ```
 
-**なぜこの方法が有効か**:  
-初回の `TMP_FontAsset.CreateFontAsset()` だけでなく、TMPが新しい日本語グリフを動的に追加する際も同じパスを通るため、
-漢字・ひらがな・カタカナの動的レンダリングが機能する。
+### この方式を採用した理由
+
+この方法であれば、初回の `TMP_FontAsset.CreateFontAsset()` だけでなく、
+TextMeshPro による動的グリフ追加時にも同じフォントデータを使えます。
+
+その結果、ひらがな・カタカナ・漢字を含む日本語表示を安定して扱えるようになりました。
 
 ## 6. 翻訳エントリの収集方法
 
-### Step 1: ゲームのロケールバンドルを抽出
+### Step 1: ロケールバンドルの展開
 
 ```python
-# UnityFS バンドルのLZ4HC圧縮を手動デコードするPythonスクリプト
-# bundle header → CI block → data block の順で解析
-
 def lz4_decompress_block(src, expected_size):
-    # 純粋Pythonで実装したLZ4ブロックデコーダー
     ...
 
 bundle = open('localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle', 'rb').read()
-# CIブロック: offset=64, size=65B → 展開後91B
-# データブロック: offset=129, c_size=12352B → uc_size=28936B
 decompressed = lz4_decompress_block(bundle[129:129+12352], 28936)
 ```
 
-### Step 2: 文字列の抽出
+UnityFS バンドルを手動で解析し、LZ4HC 圧縮されたデータブロックを展開しました。
 
-展開したバイナリから正規表現で可読文字列を抽出:
+### Step 2: 可読文字列の抽出
 
 ```python
 import re
+
 for m in re.finditer(rb'[ -~]{3,}', decompressed):
     s = m.group().decode('latin1').strip()
-    # → "Settings", "Load Save", "(Click to Rename)" など400+エントリ
 ```
 
-### Step 3: 既存ja.jsonと比較して差分を特定
+展開後のバイナリから可読文字列を抽出し、
+設定画面・ロビー・セーブ画面などで使われる UI 文言を収集しました。
+
+### Step 3: 既存翻訳との差分確認
 
 ```python
 existing = set(json.load(open('ja.json')).keys())
-extracted = { ... }  # バンドルから抽出したセット
+extracted = { ... }
 missing = extracted - existing
-# → 335件の未翻訳エントリを特定
 ```
 
-### Step 4: 翻訳・ja.jsonに追加
+既存の `ja.json` と比較し、未翻訳の文字列を洗い出しました。
 
-抽出した英語テキストを日本語訳して `ja.json` に追加。  
-翻訳のカテゴリ:
-- メニュー・ロビー・マルチプレイヤー
-- セーブ/ロードシステム
-- グラフィックス・オーディオ・コントロール設定
-- ゲームプレイ設定（カメラ、感度等）
-- HUD（月フェーズ、撤収ポイント、アップグレード名）
-- アイテム名・敵名・レベル名
-- コスメティクス（ボディパーツ全種）
-- チュートリアル・確認ダイアログの長文
-- 地域名（Photon サーバー選択）
+### Step 4: 翻訳の追加
 
-## 7. 詰まったポイントと解決策
+抽出した英語テキストを日本語化し、`ja.json` に反映しました。
 
-### ① クラス名衝突
+主な対象カテゴリは次のとおりです。
 
-**問題**: ゲーム本体に `LocalizationManager` クラスが存在するため、
-Modの同名クラスがコンパイルエラーになる。
+- メニュー、ロビー、マルチプレイヤー
+- セーブ / ロード関連
+- グラフィックス、オーディオ、コントロール設定
+- カメラ、感度などのゲームプレイ設定
+- HUD 表示
+- アイテム名、敵名、レベル名
+- コスメティクス名称
+- チュートリアル、確認ダイアログ
+- Photon サーバー選択時の地域名
 
-**解決**: Modのクラスを `TranslationManager` にリネーム。
+### Step 5: 実行時に組み立てられる文字列の調査
 
-### ② NuGet パッケージバージョン衝突
+静的な string table の差分比較だけでは、実プレイ中に組み立てられる表示文字列を取りこぼしました。
 
-**問題**: `Newtonsoft.Json` を最新版で追加するとREPOLibと衝突してクラッシュ。
+そのため、追加調査では次の資料も併用しました。
 
-**解決**: REPOLib v4.0.0 が要求するバージョン `13.0.4` を厳密に使用する。
+- スクリーンショットによる再現確認
+- `LogUntranslated = true` にしたときの `BepInEx/LogOutput.log`
+- Thunderstore profile に残っていた旧翻訳ダンプ
+
+この調査で、次のような runtime-composed text を確認しました。
+
+- コスト値が埋め込まれた reroll 表示
+- アイテム名やアップグレード名に `[E]` が付与された interact 表示
+- マップ画面のアップグレード一覧のように、既存行へ新しい英語行が追記される複数行ブロック
+
+特にマップ画面の一覧は、旧翻訳ダンプに `体力 STAMINA=体力\nスタミナ` のような痕跡があり、
+行単位ではなく累積文字列として再評価されていることが分かりました。
+
+## 7. 詰まった点と対応内容
+
+### 1. クラス名の衝突
+
+**問題**  
+ゲーム本体に `LocalizationManager` クラスが存在し、Mod 側で同名クラスを定義すると衝突しました。
+
+**対応**  
+Mod 側のクラス名を `TranslationManager` に変更しました。
+
+### 2. NuGet パッケージのバージョン衝突
+
+**問題**  
+`Newtonsoft.Json` を最新版で追加すると、REPOLib と整合しない構成になり、クラッシュが発生しました。
+
+**対応**  
+REPOLib v4.0.0 に合わせて `13.0.4` を使用しました。
 
 ```xml
 <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 ```
 
-### ③ TMP が null を返す（フォント問題）
+### 3. フォントアセット生成失敗
 
-**問題**: `TMP_FontAsset.CreateFontAsset(Font)` が `null` を返す。
+**問題**  
+`TMP_FontAsset.CreateFontAsset(Font)` が `null` を返しました。
 
-**原因**: ダミー `Font` 単体では、同梱した TTF バイト列を `FontEngine` に渡せない。
+**原因**  
+ダミー `Font` だけでは、同梱した TTF バイト列を `FontEngine` に渡せませんでした。
 
-**解決**: Harmony で `FontEngine.LoadFontFace(Font, int)` をパッチして
-`SystemFontMap` に登録したバイト列へリダイレクトする。
+**対応**  
+`FontEngine.LoadFontFace(Font, int)` を Harmony で補足し、
+`SystemFontMap` に登録した TTF バイト列へリダイレクトしました。
 
-### ④ 大文字テキストが翻訳されない
+### 4. 大文字テキストが翻訳されない
 
-**問題**: `"< GO BACK"`, `"(CLICK TO RENAME)"`, `"TOTAL HAUL:"` が翻訳されない。
+**問題**  
+`"< GO BACK"`、`"(CLICK TO RENAME)"`、`"TOTAL HAUL:"` などが翻訳されませんでした。
 
-**原因**: ゲームが `.ToUpper()` した後でTMPに文字列をセットするため、
-バンドルの `"< Go Back"` とは大文字小文字が一致しない。
+**原因**  
+ゲーム側で `.ToUpper()` を適用した後の文字列が、そのまま TMP に渡されていたためです。
 
-**解決**: 登録時に正規化済みキーの `.ToUpperInvariant()` を
-`_translationsUpper` に保持し、`Translate()` 側でも正規化後に大文字化して検索する。
+**対応**  
+正規化済みキーの `.ToUpperInvariant()` を別辞書に保持し、
+翻訳時にも大文字化して照合するようにしました。
 
 ```csharp
 _translationsUpper[NormalizeKey(kv.Key).ToUpperInvariant()] = kv.Value;
-// ...
-if (_translationsUpper.TryGetValue(normalized.ToUpperInvariant(), out translated)) return translated;
+
+if (_translationsUpper.TryGetValue(normalized.ToUpperInvariant(), out translated))
+    return translated;
+```
+
+### 5. 実行時に組み立てられる文字列が翻訳されない
+
+**問題**  
+サービスステーション外の `Medium Health Pack (50) [E]` や `SPRINT SPEED UPGRADE [E]`、
+`HOLD TO REROLL (-$5K)`、マップ画面の `1 CROUCH REST HEALTH` のような表示が英語のまま、
+または日本語と英語が混在した状態で残りました。
+
+**原因**  
+これらは辞書キーそのものではなく、実行時に次のような加工を受けた文字列だったためです。
+
+- プレースホルダの値埋め込み
+- アイテム名やアップグレード名の末尾への `[E]` 付与
+- 大文字化された既知語の連結
+- 複数行ブロックへの逐次追記
+
+**対応**  
+`TranslationManager` に runtime-composed text 向けの経路を追加しました。
+
+- `TranslationTemplate` によるプレースホルダ付きテンプレート一致
+- `[E]` などの接尾辞を保持した本体翻訳
+- 複数行ブロックの行単位翻訳
+- 大文字複合語列の最長一致による分解翻訳
+
+```csharp
+if (TryTranslateLookup(text, out result))
+    return result;
+if (TryTranslateTemplate(text, out result))
+    return result;
+if (TryTranslateActionSuffix(text, out result))
+    return result;
+if (TryTranslatePhraseSequence(text, out result))
+    return result;
 ```
 
 ## 8. ファイル構成
 
-```
-src/
-└── REPOJapaneseTranslation/
-    ├── REPOJapaneseTranslation.csproj
-    ├── Plugin.cs
-    ├── config/
-    │   └── REPOJapaneseTranslation.cfg
-    ├── fonts/
-    │   └── NotoSansJP-Regular-subset.ttf
-    ├── Localization/
-    │   ├── TranslationManager.cs
-    │   └── FontManager.cs
-    ├── Patches/
-    │   ├── TextTranslationPatch.cs
-    │   └── TMPFontPatch.cs
-    └── translations/
-        └── ja.json
+```text
+.
+├── build.sh
+└── src/
+    └── REPOJapaneseTranslation/
+        ├── REPOJapaneseTranslation.csproj
+        ├── Plugin.cs
+        ├── config/
+        │   └── REPOJapaneseTranslation.cfg
+        ├── fonts/
+        │   └── NotoSansJP-Regular-subset.ttf
+        ├── Localization/
+        │   ├── TranslationManager.cs
+        │   └── FontManager.cs
+        ├── Patches/
+        │   ├── TextTranslationPatch.cs
+        │   └── TMPFontPatch.cs
+        └── translations/
+            └── ja.json
 ```
 
 ### 各ファイルの役割
 
 #### `Plugin.cs`
 - BepInEx `BaseUnityPlugin` を継承するエントリポイント
-- BepInEx Config で以下の設定値を公開:
+- 設定項目:
   - `EnableTranslation` (bool, default: true)
   - `EnableJapaneseFont` (bool, default: true)
-  - `LogUntranslated` (bool, default: false) — 未翻訳テキストをログ出力
+  - `LogUntranslated` (bool, default: false)
 
 #### `TranslationManager.cs`
 - `ja.json` から翻訳辞書を構築
-- 組み込みリソースを読み込み、完全一致・正規化・大文字化の3経路で検索する
-- 3段階フォールバック検索（完全一致 → 正規化 → 大文字化）
+- 組み込みリソースを読み込んで翻訳データを初期化
+- 完全一致、正規化、大文字化の基本検索を行う
+- `{cost}` や `[inventory1]` などを含むテンプレートを実表示に一致させる
+- `[E]` 付き interact 表示や複数行ブロック、複合アップグレード名を扱う
 
 #### `FontManager.cs`
 - 同梱 TTF から TMP FontAsset を動的生成
-- Harmony パッチで `FontEngine.LoadFontFace(Font, int)` を `LoadFontFace(byte[], int)` にリダイレクト
-- 全TMPテキストコンポーネントのフォントへ日本語フォールバックを追加する
-- ダミー `Font` と TTF バイト列を内部マップで紐付ける
+- `FontEngine.LoadFontFace(Font, int)` をバイト列経由へリダイレクト
+- 全 TMP テキストコンポーネントへ日本語フォールバックを追加
+- パッチの二重適用を避けつつ、失敗時はダミー `Font` をクリーンアップ
 
 #### `TextTranslationPatch.cs`
-- `TMP_Text.text` セッターへのHarmonyプレフィックスパッチ
-- 全テキスト変更をインターセプトして `TranslationManager.Translate()` を呼ぶ
+- `TMP_Text.text` セッターへの Harmony パッチ
+- テキスト更新時に `TranslationManager.Translate()` を呼ぶ
 
 #### `TMPFontPatch.cs`
-- シーン読み込み後に `FontManager.ApplyFallbackToAllTextComponents()` を呼ぶ
-- シーン切り替え後の TMP フォントにも日本語フォールバックを再適用する
+- シーン読み込み後にフォントフォールバックを再適用
+- シーン切り替え後の UI にも日本語フォントを反映
 
 #### `ja.json`
-- キー: 英語テキスト（完全一致）
+- キー: 英語原文
 - 値: 日本語訳
-- `_` または `//` で始まるキーはコメントとして無視される
-- 組み込みリソースとしてDLLに埋め込まれる翻訳ソース
+- `_` または `//` で始まるキーはコメントとして無視
+- DLL に組み込みリソースとして埋め込み
 
+#### `build.sh`
+- リポジトリルートから Release ビルドを実行する補助スクリプト
+- `dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release` の薄いラッパー
 
+## 9. ビルドとデプロイ
 
-## 9. ビルドとデプロイ手順
+### 必要環境
 
-### 必要な環境
-
-- .NET SDK 6.0以上
-- WSL (Windows Subsystem for Linux) または Windows コマンドプロンプト
+- .NET SDK 6.0 以上
+- WSL または Windows コマンドプロンプト
 
 ### ビルド
 
 ```bash
 cd /path/to/repo-jp-lang
 dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
-# → src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
+# または
+bash build.sh
+```
+
+PATH に `dotnet` が通っていない環境では、次のように `DOTNET_ROOT` を通して実行できます。
+
+```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
+"$DOTNET_ROOT/dotnet" build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
+```
+
+生成物:
+
+```text
+src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
 ```
 
 ### デプロイ
 
-生成されたDLLとフォントファイルを以下の2箇所にコピー:
+生成した DLL とフォントファイルを、ゲーム環境にコピーします。
 
 ```bash
-# ゲームルート（直接起動時）
+# ゲームルート
 cp src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll \
     "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseTranslation/"
 cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
@@ -385,20 +499,19 @@ cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
     "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseTranslation/fonts/"
 ```
 
-### 翻訳の更新
+### 翻訳更新
 
-翻訳辞書はDLLに埋め込まれているため、
-`src/REPOJapaneseTranslation/translations/ja.json` を編集した後に再ビルドして反映する。
+翻訳辞書は DLL に埋め込まれているため、
+`src/REPOJapaneseTranslation/translations/ja.json` を編集した後は再ビルドが必要です。
 
 ### 未翻訳テキストの確認
 
-`BepInEx/config/REPOJapaneseTranslation.cfg` で
-`LogUntranslated = true` に設定すると、翻訳されなかったテキストが
-`BepInEx/LogOutput.log` に `[未翻訳]` タグ付きで出力される。
+`BepInEx/config/REPOJapaneseTranslation.cfg` で `LogUntranslated = true` にすると、
+未翻訳テキストを `BepInEx/LogOutput.log` に `[未翻訳]` タグ付きで出力できます。
 
 ## 参考リンク
 
-- [REPOLib GitHub](https://github.com/ZehsTeam/REPOLib) — BepInEx helper library for R.E.P.O.
+- [REPOLib GitHub](https://github.com/ZehsTeam/REPOLib)
 - [BepInEx 5 ドキュメント](https://docs.bepinex.dev/articles/user_guide/installation/index.html)
 - [HarmonyX ドキュメント](https://harmony.pardeike.net/articles/intro.html)
 - [TextMeshPro ドキュメント](https://docs.unity3d.com/Packages/com.unity.textmeshpro@3.0/manual/index.html)
