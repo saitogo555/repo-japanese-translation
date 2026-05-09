@@ -81,6 +81,6 @@ dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Relea
 # -> src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
 ```
 
-## ライセンス / License
+## ライセンス
 
 MIT License
