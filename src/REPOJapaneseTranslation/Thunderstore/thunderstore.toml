@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 repository = "https://thunderstore.io"
 
 [package]
-versionNumber = "1.0.1"
+versionNumber = "1.0.2"
 namespace = "saitogo"
 name = "REPOJapaneseTranslation"
 description = "R.E.P.O.の日本語化Modです。ゲーム内テキストを日本語に翻訳します。"
@@ -23,15 +23,15 @@ outdir = "../../../artifacts/thunderstore/"
 
 [[build.copy]]
 source = "../../../src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll"
-target = "plugins/REPOJapaneseTranslation/"
+target = "/"
 
 [[build.copy]]
 source = "../../../src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf"
-target = "plugins/REPOJapaneseTranslation/fonts/"
+target = "/"
 
 [[build.copy]]
 source = "../../../src/REPOJapaneseTranslation/config/REPOJapaneseTranslation.cfg"
-target = "config/"
+target = "/"
 
 [[build.copy]]
 source = "../../../CHANGELOG.md"
