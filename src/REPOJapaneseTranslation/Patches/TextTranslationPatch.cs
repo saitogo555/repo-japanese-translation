@@ -18,7 +18,6 @@ internal static class TextTranslationPatch
     [HarmonyPrefix]
     private static void TranslateText(ref string value)
     {
-        if (value == null) return;
         value = TranslationManager.Translate(value);
     }
 }

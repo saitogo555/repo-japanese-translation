@@ -1,6 +1,6 @@
 {
   "_comment": "R.E.P.O. 日本語翻訳ファイル / Japanese translation file for R.E.P.O.",
-  "_comment2": "このファイルをコピーして BepInEx/plugins/REPOJapaneseLang/ に配置することで翻訳を上書きできます。",
+  "_comment2": "このファイルはビルド時に DLL へ埋め込まれる翻訳ソースです。",
   "_section_menu": "=== メニュー ===",
   "Play": "プレイ",
   "Resume": "再開",

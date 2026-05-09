@@ -60,7 +60,7 @@ internal static class TranslationManager
 
                 s_translations[key] = value;
 
-                string upper = key.ToUpperInvariant();
+                string upper = NormalizeKey(key).ToUpperInvariant();
                 s_translationsUpper.TryAdd(upper, value);
             }
         }
@@ -83,17 +83,23 @@ internal static class TranslationManager
             return result;
 
         // 2. 改行正規化して再検索
-        string normalized = text.Replace("\r\n", "\n").Trim();
+        string normalized = NormalizeKey(text);
         if (normalized != text && s_translations.TryGetValue(normalized, out result))
             return result;
 
         // 3. 大文字化フォールバック（ゲームが .ToUpper() してからセットするケース）
-        if (s_translationsUpper.TryGetValue(normalized, out result))
+        string upperNormalized = normalized.ToUpperInvariant();
+        if (s_translationsUpper.TryGetValue(upperNormalized, out result))
             return result;
 
         if (Plugin.LogUntranslated.Value)
             Plugin.Logger.LogDebug($"[未翻訳] \"{text.Replace("\n", "\\n")}\"");
 
         return text;
+    }
+
+    private static string NormalizeKey(string text)
+    {
+        return text.Replace("\r\n", "\n").Trim();
     }
 }

@@ -20,19 +20,20 @@ internal static class FontManager
     private const string TtfFileName = "NotoSansJP-Regular-subset.ttf";
     private const string FontsFolderName = "fonts";
 
-    // Font オブジェクト → TTF バイト列。FontEngineLoadFontFacePatch から参照されます。
-    internal static readonly Dictionary<Font, byte[]> SystemFontMap = new();
+    // ダミー Font オブジェクト → TTF バイト列。
+    private static readonly Dictionary<Font, byte[]> SystemFontMap = new();
 
     private static TMP_FontAsset? s_japaneseFontAsset;
     private static readonly HashSet<TMP_FontAsset> s_patchedFonts = new();
     private static bool s_initialized;
+    private static bool s_fontEnginePatched;
 
     /// <param name="pluginLocation">プラグイン DLL のフルパス（TTF 探索の基準パスになります）</param>
     internal static void Initialize(string pluginLocation)
     {
         if (s_initialized) return;
-        if (!Plugin.EnableJapaneseFont.Value) return;
         s_initialized = true;
+        if (!Plugin.EnableJapaneseFont.Value) return;
 
         try
         {
@@ -42,7 +43,7 @@ internal static class FontManager
             if (!File.Exists(ttfPath))
             {
                 Plugin.Logger.LogWarning($"日本語フォントファイルが見つかりません: {ttfPath}");
-                Plugin.Logger.LogWarning($"plugins/REPOJapaneseLang/{FontsFolderName}/{TtfFileName} を配置してください。");
+                Plugin.Logger.LogWarning($"plugins/REPOJapaneseTranslation/{FontsFolderName}/{TtfFileName} を配置してください。");
                 return;
             }
 
@@ -96,6 +97,8 @@ internal static class FontManager
 
     private static void PatchFontEngine()
     {
+        if (s_fontEnginePatched) return;
+
         try
         {
             var harmony = new Harmony("REPOJapaneseTranslation.FontEngineHook");
@@ -107,12 +110,13 @@ internal static class FontManager
                 null
             );
             var prefix = typeof(FontEngineLoadFontFacePatch)
-                .GetMethod(nameof(FontEngineLoadFontFacePatch.Prefix),
-                           BindingFlags.Public | BindingFlags.Static);
+                .GetMethod("Prefix",
+                           BindingFlags.NonPublic | BindingFlags.Static);
 
             if (target != null && prefix != null)
             {
                 harmony.Patch(target, prefix: new HarmonyMethod(prefix));
+                s_fontEnginePatched = true;
                 Plugin.Logger.LogDebug("FontEngine.LoadFontFace(Font, int) をパッチしました。");
             }
             else
@@ -155,6 +159,7 @@ internal static class FontManager
 
         if (fontAsset == null)
         {
+            CleanupFailedDummyFont(dummyFont);
             Plugin.Logger.LogWarning("TMP_FontAsset を作成できませんでした。");
             return null;
         }
@@ -162,6 +167,12 @@ internal static class FontManager
         fontAsset.name = "JapaneseFallback_NotoSansJP";
         fontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
         return fontAsset;
+    }
+
+    private static void CleanupFailedDummyFont(Font dummyFont)
+    {
+        SystemFontMap.Remove(dummyFont);
+        UnityEngine.Object.Destroy(dummyFont);
     }
 
     private static void TryAddToTMPGlobalFallback(TMP_FontAsset fontAsset)
@@ -197,34 +208,20 @@ internal static class FontManager
             Plugin.Logger.LogDebug($"TMP グローバルフォールバック設定をスキップしました: {ex.Message}");
         }
     }
-}
 
-/// <summary>
-/// FontEngine.LoadFontFace(Font, int) にプレフィックスパッチを適用し、
-/// SystemFontMap に登録されたフォントについて LoadFontFace(byte[], int) にリダイレクトします。
-/// TMP_FontAsset.CreateFontAsset の初回呼び出しと、動的グリフ追加時の再呼び出しの両方を捕捉します。
-/// </summary>
-[HarmonyPatch]
-internal static class FontEngineLoadFontFacePatch
-{
-    [HarmonyTargetMethod]
-    public static MethodBase TargetMethod()
+    /// <summary>
+    /// FontEngine.LoadFontFace(Font, int) をフックし、登録済みのダミー Font を
+    /// LoadFontFace(byte[], int) にリダイレクトします。
+    /// </summary>
+    private static class FontEngineLoadFontFacePatch
     {
-        return typeof(FontEngine).GetMethod(
-            "LoadFontFace",
-            BindingFlags.Public | BindingFlags.Static,
-            null,
-            new[] { typeof(Font), typeof(int) },
-            null
-        )!;
-    }
+        private static bool Prefix(Font font, int pointSize, ref FontEngineError __result)
+        {
+            if (font == null || !SystemFontMap.TryGetValue(font, out byte[]? fontBytes))
+                return true; // 登録されていない Font → オリジナルに委譲
 
-    public static bool Prefix(Font font, int pointSize, ref FontEngineError __result)
-    {
-        if (font == null || !FontManager.SystemFontMap.TryGetValue(font, out byte[]? fontBytes))
-            return true; // 登録されていない Font → オリジナルに委譲
-
-        __result = FontEngine.LoadFontFace(fontBytes, pointSize);
-        return false; // オリジナルをスキップ
+            __result = FontEngine.LoadFontFace(fontBytes, pointSize);
+            return false; // オリジナルをスキップ
+        }
     }
 }
