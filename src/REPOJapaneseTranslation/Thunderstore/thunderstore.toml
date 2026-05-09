@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 repository = "https://thunderstore.io"
 
 [package]
-versionNumber = "1.0.0"
+versionNumber = "1.0.1"
 namespace = "saitogo"
 name = "REPOJapaneseTranslation"
 description = "R.E.P.O.の日本語化Modです。ゲーム内テキストを日本語に翻訳します。"
@@ -17,31 +17,31 @@ BepInEx-BepInExPack = "5.4.2305"
 Zehs-REPOLib = "4.0.0"
 
 [build]
-icon = "../../icon.png"
-readme = "../../README.md"
-outdir = "../../artifacts/thunderstore/"
+icon = "../../../icon.png"
+readme = "../../../README.md"
+outdir = "../../../artifacts/thunderstore/"
 
 [[build.copy]]
-source = "../../artifacts/bin/REPOJapaneseTranslation/release/REPOJapaneseTranslation.dll"
+source = "../../../src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll"
 target = "plugins/REPOJapaneseTranslation/"
 
 [[build.copy]]
-source = "../../src/REPOJapaneseTranslation/fonts/"
+source = "../../../src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf"
 target = "plugins/REPOJapaneseTranslation/fonts/"
 
 [[build.copy]]
-source = "../../src/REPOJapaneseTranslation/config/REPOJapaneseTranslation.cfg"
+source = "../../../src/REPOJapaneseTranslation/config/REPOJapaneseTranslation.cfg"
 target = "config/"
 
 [[build.copy]]
-source = "../../CHANGELOG.md"
+source = "../../../CHANGELOG.md"
 target = "/"
 
 [[build.copy]]
-source = "../../LICENSE.txt"
+source = "../../../LICENSE"
 target = "/"
 
 [publish]
 communities = ["repo"]
 [publish.categories]
-repo = ["mods","misc", "client-side"]
+repo = ["mods","misc", "clientside"]
