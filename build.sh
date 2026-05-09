@@ -1,0 +1,1 @@
+dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
