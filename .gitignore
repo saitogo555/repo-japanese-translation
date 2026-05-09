@@ -1,0 +1,13 @@
+# MSBuild 中間出力 (ビルドごとに自動生成されるため管理不要)
+obj/
+bin/
+
+# Visual Studio
+.vs/
+*.user
+
+# Rider / JetBrains
+.idea/
+
+# Thunderstore build output
+artifacts/
