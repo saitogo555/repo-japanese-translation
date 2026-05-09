@@ -24,6 +24,16 @@ internal static class TranslationManager
         RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
+    private static readonly Regex s_richTextSuffixRegex = new(
+        @"^(?<body>.+?)(?<suffix>\s*(?:<[^>]+>)+\s*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant
+    );
+
+    private static readonly Regex s_labeledPrefixRegex = new(
+        @"^(?<leadingTags>(?:<[^>]+>)*)(?<label>[^<>]+?)(?<separator>\s*>\s*)(?<trailingTags>(?:</[^>]+>)*)(?<body>.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant
+    );
+
     // 正規化された英語キー → 日本語値
     private static readonly Dictionary<string, string> s_translations = new(StringComparer.Ordinal);
     // ゲームが .ToUpper() してからセットする場合のフォールバック（例: "< Go Back" → "< GO BACK"）
@@ -128,6 +138,12 @@ internal static class TranslationManager
         if (TryTranslateTemplate(text, out result))
             return true;
 
+        if (TryTranslateLabeledPrefix(text, out result))
+            return true;
+
+        if (TryTranslateRichTextSuffix(text, out result))
+            return true;
+
         if (TryTranslateActionSuffix(text, out result))
             return true;
 
@@ -169,9 +185,59 @@ internal static class TranslationManager
         return false;
     }
 
+    private static bool TryTranslateLabeledPrefix(string text, out string result)
+    {
+        Match match = s_labeledPrefixRegex.Match(text);
+        if (!match.Success)
+        {
+            result = text;
+            return false;
+        }
+
+        string leadingTags = match.Groups["leadingTags"].Value;
+        string label = match.Groups["label"].Value;
+        string separator = match.Groups["separator"].Value;
+        string trailingTags = match.Groups["trailingTags"].Value;
+        string body = match.Groups["body"].Value;
+
+        if (!TryTranslateCore(body, out string translatedBody))
+        {
+            result = text;
+            return false;
+        }
+
+        string translatedLabel = TryTranslateLookup(label, out string lookedUpLabel) ? lookedUpLabel : label;
+        result = leadingTags + translatedLabel + separator + trailingTags + translatedBody;
+        return true;
+    }
+
     private static bool TryTranslateActionSuffix(string text, out string result)
     {
         Match match = s_actionSuffixRegex.Match(text);
+        if (!match.Success)
+        {
+            result = text;
+            return false;
+        }
+
+        string body = match.Groups["body"].Value;
+        string suffix = match.Groups["suffix"].Value;
+
+        if (!TryTranslateLookup(body, out string translatedBody)
+            && !TryTranslateTemplate(body, out translatedBody)
+            && !TryTranslatePhraseSequence(body, out translatedBody))
+        {
+            result = text;
+            return false;
+        }
+
+        result = translatedBody + suffix;
+        return true;
+    }
+
+    private static bool TryTranslateRichTextSuffix(string text, out string result)
+    {
+        Match match = s_richTextSuffixRegex.Match(text);
         if (!match.Success)
         {
             result = text;

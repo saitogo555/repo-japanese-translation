@@ -45,6 +45,9 @@ public class Plugin : BaseUnityPlugin
             false,
             "未翻訳のテキストをログに出力するかどうか (開発者向け) / Log untranslated strings (for developers)");
 
+        if (LogUntranslated.Value)
+            Logger.LogInfo("デバッグモード有効: 未翻訳テキストのログ出力を有効化しました。");
+
         TranslationManager.Initialize();
         FontManager.Initialize(Info.Location);
 
