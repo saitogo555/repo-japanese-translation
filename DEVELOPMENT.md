@@ -26,7 +26,7 @@
 | BepInEx | 5.4.23.5 |
 | REPOLib | 4.0.0 |
 | TextMeshPro | 3.0.7 |
-| 翻訳エントリ数 | 647件 |
+| 翻訳エントリ数 | 652件 |
 
 ## 2. 調査対象ファイル
 
@@ -99,10 +99,12 @@ magic(8B) + format_ver(4B) + unity_ver(可変) + unity_rev(可変)
 
 調査した範囲では、R.E.P.O. の UI テキスト表示には TextMeshPro 系コンポーネントが使われていました。
 
-また、主要なテキスト更新は `TMP_Text.text` セッター経由で反映されており、翻訳処理の差し込みポイントとして扱いやすいことを確認しました。
+また、主要なテキスト更新は `TMP_Text.text` セッターに加えて `TMP_Text.SetText(...)` 系メソッド経由でも反映されており、
+両方を翻訳処理の差し込みポイントとして扱う必要があることを確認しました。
 
 ```csharp
 someLabel.text = "Settings";
+someLabel.SetText("Settings");
 ```
 
 ### Unity Localization の利用
@@ -130,7 +132,8 @@ strings Assembly-CSharp.dll | grep -i "toupper"
 ```text
 [ゲームコード]
     ↓ someLabel.text = "Settings"
-[Harmony Prefix Patch on TMP_Text.text setter]
+    ↓ または someLabel.SetText("Settings")
+[Harmony Prefix Patch on TMP_Text.text setter / SetText]
     ↓ TranslationManager.Translate("Settings")
     ↓ → "設定"
 [TMP_Text にセット]
@@ -151,13 +154,17 @@ strings Assembly-CSharp.dll | grep -i "toupper"
 2. 改行正規化後の一致
 3. 大文字化したキーでの一致
 4. プレースホルダ付きテンプレートの一致
-5. 末尾の操作ヒント付き表示の本体翻訳
-6. 複数行ブロックの行単位翻訳
-7. 全大文字の複合語列を既知語へ分解して翻訳
+5. `FOCUS > ...` のような接頭辞付き表示の本体翻訳
+6. 末尾の操作ヒント付き表示の本体翻訳
+7. リッチテキスト接尾辞付き表示の本体翻訳
+8. 複数行ブロックの行単位翻訳
+9. 全大文字の複合語列を既知語へ分解して翻訳
 
 ```csharp
 if (TryTranslateLookup(text, out result)) return result;
 if (TryTranslateTemplate(text, out result)) return result;
+if (TryTranslateLabeledPrefix(text, out result)) return result;
+if (TryTranslateRichTextSuffix(text, out result)) return result;
 if (TryTranslateActionSuffix(text, out result)) return result;
 if (TryTranslatePhraseSequence(text, out result)) return result;
 ```
@@ -180,17 +187,30 @@ private static readonly Regex s_actionSuffixRegex = new(
 `src/REPOJapaneseTranslation/Patches/TextTranslationPatch.cs`
 
 ```csharp
-[HarmonyPatch(typeof(TMP_Text))]
-[HarmonyPatch("text", MethodType.Setter)]
+[HarmonyTargetMethods]
 [HarmonyPrefix]
-private static void TranslateText(ref string value)
+private static void TranslateText(ref string __0)
 {
-    value = TranslationManager.Translate(value);
+    __0 = TranslationManager.Translate(__0);
 }
 ```
 
-`TMP_Text.text` セッターを主なパッチ地点にすることで、
+`TMP_Text.text` セッターだけでなく、`TMP_Text.SetText(...)` 系メソッドも対象にすることで、
 調査範囲で確認できた主要な UI テキスト更新をまとめて捕捉できました。
+
+```csharp
+[HarmonyTargetMethods]
+private static IEnumerable<MethodBase> TargetMethods()
+{
+    ...
+}
+
+[HarmonyPrefix]
+private static void TranslateText(ref string __0)
+{
+    __0 = TranslationManager.Translate(__0);
+}
+```
 
 ## 5. フォント処理の調査と対応
 
@@ -388,6 +408,21 @@ if (TryTranslatePhraseSequence(text, out result))
     return result;
 ```
 
+### 6. `TMP_Text.SetText(...)` 経由の表示が翻訳されない
+
+**問題**  
+`RANDOM MATCHMAKING`、`FOCUS > ...`、一部のチュートリアル文言のように、
+辞書にキーがあっても英語のまま残るケースがありました。
+
+**原因**  
+一部の UI は `TMP_Text.text` セッターではなく、`TMP_Text.SetText(...)` 系メソッドで更新されていました。
+当初のパッチはセッターしか捕捉していなかったため、この経路を通る文字列は翻訳処理に入りませんでした。
+
+**対応**  
+Harmony パッチの対象を `TMP_Text.text` セッターに加えて、
+第1引数が `string` の `TMP_Text.SetText(...)` オーバーロード全体へ拡張しました。
+あわせて、`FOCUS > ...` のような接頭辞付き表示や、sprite を伴う表示は本体側を分解して翻訳する経路を追加しました。
+
 ## 8. ファイル構成
 
 ```text
@@ -395,6 +430,7 @@ if (TryTranslatePhraseSequence(text, out result))
 ├── build.sh
 └── src/
     └── REPOJapaneseTranslation/
+        ├── MyPluginInfo.cs
         ├── REPOJapaneseTranslation.csproj
         ├── Plugin.cs
         ├── config/
@@ -419,6 +455,11 @@ if (TryTranslatePhraseSequence(text, out result))
   - `EnableTranslation` (bool, default: true)
   - `EnableJapaneseFont` (bool, default: true)
   - `LogUntranslated` (bool, default: false)
+- `LogUntranslated = true` のときにデバッグモード有効ログを出力
+
+#### `MyPluginInfo.cs`
+- プラグイン GUID、表示名、バージョンをソースコード上で定義
+- Release / Debug の生成キャッシュに依存せず、同じ版数を確実に埋め込む
 
 #### `TranslationManager.cs`
 - `ja.json` から翻訳辞書を構築
@@ -434,7 +475,7 @@ if (TryTranslatePhraseSequence(text, out result))
 - パッチの二重適用を避けつつ、失敗時はダミー `Font` をクリーンアップ
 
 #### `TextTranslationPatch.cs`
-- `TMP_Text.text` セッターへの Harmony パッチ
+- `TMP_Text.text` セッターと `TMP_Text.SetText(...)` への Harmony パッチ
 - テキスト更新時に `TranslationManager.Translate()` を呼ぶ
 
 #### `TMPFontPatch.cs`
@@ -449,7 +490,7 @@ if (TryTranslatePhraseSequence(text, out result))
 
 #### `build.sh`
 - リポジトリルートから Release ビルドを実行する補助スクリプト
-- `dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release` の薄いラッパー
+- `dotnet clean` の後に `dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release` を実行
 
 ## 9. ビルドとデプロイ
 
