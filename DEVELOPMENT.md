@@ -46,9 +46,10 @@ G:\Steam\steamapps\common\REPO\
 │               └── *.bundle
 └── BepInEx\
     └── plugins\
-        └── REPOJapaneseLang\
-            ├── REPOJapaneseLang.dll
-            └── ja.json
+        └── REPOJapaneseTranslation\
+            ├── REPOJapaneseTranslation.dll
+            └── fonts\
+                └── NotoSansJP-Regular-subset.ttf
 ```
 
 ### 解析した主要ファイル
@@ -130,29 +131,27 @@ strings Assembly-CSharp.dll | grep -i "toupper"
 
 ### TranslationManager の仕組み
 
-`REPOJapaneseLang/Localization/LocalizationManager.cs`
+`src/REPOJapaneseTranslation/Localization/TranslationManager.cs`
 
-1. **起動時**: 組み込みリソース `ja.json` を読み込む
-2. **起動時**: プラグインフォルダ内の外部 `ja.json` を読み込んで上書きマージ
+1. **起動時**: 組み込みリソース `translations/ja.json` を読み込む
+2. **登録時**: 原文キーに加えて、正規化後に `.ToUpperInvariant()` したキーも保持する
 3. **翻訳時**: 3段階のフォールバック検索
    - ① 完全一致 (Ordinal)
    - ② 改行正規化後に完全一致
    - ③ 大文字化キーで一致（ToUpper問題への対処）
 
 ```csharp
-// 大文字化フォールバックの仕組み
-// MergeTranslations() で登録時:
-_translations["< Go Back"] = "< 戻る";
-_translationsUpper["< GO BACK"] = "< 戻る";   // .ToUpper() したキーでも検索可能
+string normalized = text.Replace("\r\n", "\n").Trim();
+string upperNormalized = normalized.ToUpperInvariant();
 
-// Translate() で:
-if (_translations.TryGetValue(text, out translated)) return translated;   // 完全一致
-if (_translationsUpper.TryGetValue(normalized, out translated)) return translated; // 大文字フォールバック
+if (_translations.TryGetValue(text, out translated)) return translated;
+if (normalized != text && _translations.TryGetValue(normalized, out translated)) return translated;
+if (_translationsUpper.TryGetValue(upperNormalized, out translated)) return translated;
 ```
 
 ### Harmony パッチ
 
-`REPOJapaneseLang/Patches/TextTranslationPatch.cs`
+`src/REPOJapaneseTranslation/Patches/TextTranslationPatch.cs`
 
 ```csharp
 [HarmonyPatch(typeof(TMP_Text))]
@@ -170,45 +169,34 @@ Unity Localization の `LocalizeStringEvent` も最終的に `TMP_Text.text = ..
 
 ## 5. フォントシステムの調査と修正
 
-### 問題: 日本語フォントが表示されない
+### 問題: 同梱 TTF から TMP_FontAsset を安定して生成したい
 
-`Font.CreateDynamicFontFromOSFont("Meiryo UI", size)` で作成したフォントを
-`TMP_FontAsset.CreateFontAsset(font)` に渡すと失敗する。
+`TMP_FontAsset.CreateFontAsset(Font)` は内部で `FontEngine.LoadFontFace(Font, int)` を呼ぶため、
+単純にダミーの `Font` を渡すだけではフォントバイト列に辿れず失敗することがある。
 
 **原因の特定**:
-- `CreateDynamicFontFromOSFont()` はOSのGDIハンドルを参照するだけで、フォントファイルのバイナリデータを持たない
-- `TMP_FontAsset.CreateFontAsset(Font)` は内部で `FontEngine.LoadFontFace(Font, int)` を呼ぶが、これはフォントファイルのバイナリデータが必要
-- → `FontEngine.LoadFontFace_With_Size_FromFont_Internal` が失敗 → `null` 返却
+- 日本語フォントは `fonts/NotoSansJP-Regular-subset.ttf` としてプラグインに同梱している
+- `TMP_FontAsset.CreateFontAsset(Font)` は `Font` インスタンスからフォントデータを直接引けないと失敗する
+- 動的グリフ追加時も同じ `LoadFontFace(Font, int)` 経路が再利用される
 
-### 解決策: Harmony パッチで FontEngine をハイジャック
+### 解決策: ダミー Font を TTF バイト列にリダイレクト
 
-`FontEngine.LoadFontFace(Font, int)` をパッチし、
-実際のOSフォントAPIを使う `FontEngine.LoadFontFace(string familyName, string styleName)` に
-リダイレクトする。
+TTF をバイト列で読み込み、ダミー `Font` と対応付けてから
+`FontEngine.LoadFontFace(Font, int)` を `LoadFontFace(byte[], int)` にリダイレクトする。
 
 ```csharp
-// FontEngine.LoadFontFace(Font, int) の呼び出しを横取り
-[HarmonyPatch(typeof(FontEngine), nameof(FontEngine.LoadFontFace),
-    new[] { typeof(Font), typeof(int) })]
-[HarmonyPrefix]
 private static bool Prefix(Font font, int pointSize, ref FontEngineError __result)
 {
-    if (!SystemFontMap.TryGetValue(font, out string familyName)) return true; // 元のメソッドに任せる
+    if (font == null || !SystemFontMap.TryGetValue(font, out byte[] fontBytes))
+        return true;
 
-    FontEngineError err = FontEngine.LoadFontFace(familyName, "Regular");
-    if (err == FontEngineError.Success)
-        FontEngine.SetFaceSize(pointSize);
-    __result = err;
-    return false; // 元のメソッドをスキップ
+    __result = FontEngine.LoadFontFace(fontBytes, pointSize);
+    return false;
 }
 ```
 
 **なぜこの方法が有効か**:  
-`FontEngine.LoadFontFace(string familyName, string styleName)` は内部で
-Win32/FreeType の `LoadFontFace_by_FamilyName_and_StyleName_Internal` を呼ぶため、
-OSにインストールされたフォントをファイルバイナリなしで直接ロードできる。
-
-また、TMPが新しい日本語グリフを動的に追加する際も同じパスを通るため、
+初回の `TMP_FontAsset.CreateFontAsset()` だけでなく、TMPが新しい日本語グリフを動的に追加する際も同じパスを通るため、
 漢字・ひらがな・カタカナの動的レンダリングが機能する。
 
 ## 6. 翻訳エントリの収集方法
@@ -286,11 +274,10 @@ Modの同名クラスがコンパイルエラーになる。
 
 **問題**: `TMP_FontAsset.CreateFontAsset(Font)` が `null` を返す。
 
-**原因**: `CreateDynamicFontFromOSFont()` で作ったフォントはOSハンドル参照のみ。
-TMP内部の `LoadFontFace_With_Size_FromFont_Internal` にフォントバイナリが渡せない。
+**原因**: ダミー `Font` 単体では、同梱した TTF バイト列を `FontEngine` に渡せない。
 
 **解決**: Harmony で `FontEngine.LoadFontFace(Font, int)` をパッチして
-`LoadFontFace(familyName, styleName)` + `SetFaceSize()` にリダイレクト。
+`SystemFontMap` に登録したバイト列へリダイレクトする。
 
 ### ④ 大文字テキストが翻訳されない
 
@@ -299,28 +286,34 @@ TMP内部の `LoadFontFace_With_Size_FromFont_Internal` にフォントバイナ
 **原因**: ゲームが `.ToUpper()` した後でTMPに文字列をセットするため、
 バンドルの `"< Go Back"` とは大文字小文字が一致しない。
 
-**解決**: `MergeTranslations()` でエントリ登録時に `.ToUpper()` したキーでも
-`_translationsUpper` ディクショナリに登録し、`Translate()` でフォールバック検索する。
+**解決**: 登録時に正規化済みキーの `.ToUpperInvariant()` を
+`_translationsUpper` に保持し、`Translate()` 側でも正規化後に大文字化して検索する。
 
 ```csharp
-_translationsUpper[kv.Key.ToUpper()] = kv.Value;
+_translationsUpper[NormalizeKey(kv.Key).ToUpperInvariant()] = kv.Value;
 // ...
-if (_translationsUpper.TryGetValue(normalized, out translated)) return translated;
+if (_translationsUpper.TryGetValue(normalized.ToUpperInvariant(), out translated)) return translated;
 ```
 
 ## 8. ファイル構成
 
 ```
-REPOJapaneseLang/
-├── REPOJapaneseLang.csproj        # プロジェクト定義（依存関係・ターゲット等）
-├── Plugin.cs                      # BepInEx エントリポイント・設定値
-├── Localization/
-│   ├── LocalizationManager.cs     # TranslationManager クラス（翻訳辞書管理）
-│   └── FontManager.cs             # 日本語フォントのTMPアセット生成・Harmonyパッチ
-├── Patches/
-│   └── TextTranslationPatch.cs    # TMP_Text.text セッターへのHarmonyパッチ
-└── translations/
-    └── ja.json                    # 翻訳辞書（埋め込みリソース＋外部ファイル両用）
+src/
+└── REPOJapaneseTranslation/
+    ├── REPOJapaneseTranslation.csproj
+    ├── Plugin.cs
+    ├── config/
+    │   └── REPOJapaneseTranslation.cfg
+    ├── fonts/
+    │   └── NotoSansJP-Regular-subset.ttf
+    ├── Localization/
+    │   ├── TranslationManager.cs
+    │   └── FontManager.cs
+    ├── Patches/
+    │   ├── TextTranslationPatch.cs
+    │   └── TMPFontPatch.cs
+    └── translations/
+        └── ja.json
 ```
 
 ### 各ファイルの役割
@@ -332,26 +325,30 @@ REPOJapaneseLang/
   - `EnableJapaneseFont` (bool, default: true)
   - `LogUntranslated` (bool, default: false) — 未翻訳テキストをログ出力
 
-#### `LocalizationManager.cs` (クラス名: TranslationManager)
+#### `TranslationManager.cs`
 - `ja.json` から翻訳辞書を構築
-- 起動順: 組み込みリソース → 外部ファイル（外部が優先）
+- 組み込みリソースを読み込み、完全一致・正規化・大文字化の3経路で検索する
 - 3段階フォールバック検索（完全一致 → 正規化 → 大文字化）
 
 #### `FontManager.cs`
-- システムフォント（Meiryo UI 等）からTMP FontAsset を動的生成
-- Harmony パッチで `FontEngine.LoadFontFace(Font, int)` をリダイレクト
-- 全TMPテキストコンポーネントのフォントを日本語対応フォントに差し替える
-- `SystemFontMap` で Unity `Font` オブジェクトとフォントファミリー名を紐付け
+- 同梱 TTF から TMP FontAsset を動的生成
+- Harmony パッチで `FontEngine.LoadFontFace(Font, int)` を `LoadFontFace(byte[], int)` にリダイレクト
+- 全TMPテキストコンポーネントのフォントへ日本語フォールバックを追加する
+- ダミー `Font` と TTF バイト列を内部マップで紐付ける
 
 #### `TextTranslationPatch.cs`
 - `TMP_Text.text` セッターへのHarmonyプレフィックスパッチ
 - 全テキスト変更をインターセプトして `TranslationManager.Translate()` を呼ぶ
 
+#### `TMPFontPatch.cs`
+- シーン読み込み後に `FontManager.ApplyFallbackToAllTextComponents()` を呼ぶ
+- シーン切り替え後の TMP フォントにも日本語フォールバックを再適用する
+
 #### `ja.json`
 - キー: 英語テキスト（完全一致）
 - 値: 日本語訳
 - `_` または `//` で始まるキーはコメントとして無視される
-- 組み込みリソースとしてDLLに埋め込み、かつ外部ファイルとしても配置可能（外部優先）
+- 組み込みリソースとしてDLLに埋め込まれる翻訳ソース
 
 
 
@@ -366,33 +363,36 @@ REPOJapaneseLang/
 
 ```bash
 cd /path/to/repo-jp-lang
-dotnet build REPOJapaneseLang/REPOJapaneseLang.csproj -c Release
-# → REPOJapaneseLang/bin/Release/netstandard2.1/REPOJapaneseLang.dll
+dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
+# → src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
 ```
 
 ### デプロイ
 
-生成されたDLLと `ja.json` を以下の2箇所にコピー:
+生成されたDLLとフォントファイルを以下の2箇所にコピー:
 
 ```bash
 # ゲームルート（直接起動時）
-cp REPOJapaneseLang.dll "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseLang/"
-cp ja.json              "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseLang/"
+cp src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll \
+    "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseTranslation/"
+cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
+    "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseTranslation/fonts/"
 
 # Thunderstore Mod Manager プロファイル
-cp REPOJapaneseLang.dll "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseLang/"
-cp ja.json              "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseLang/"
+cp src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll \
+    "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseTranslation/"
+cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
+    "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseTranslation/fonts/"
 ```
 
-### 翻訳のカスタマイズ
+### 翻訳の更新
 
-外部 `ja.json` はDLL内の翻訳辞書より優先されるため、
-プラグインフォルダ内の `ja.json` を直接編集してカスタム翻訳を追加できる。
-DLLの再ビルドは不要。
+翻訳辞書はDLLに埋め込まれているため、
+`src/REPOJapaneseTranslation/translations/ja.json` を編集した後に再ビルドして反映する。
 
 ### 未翻訳テキストの確認
 
-`BepInEx.cfg` または `BepInEx/config/REPOJapaneseLang.cfg` で
+`BepInEx/config/REPOJapaneseTranslation.cfg` で
 `LogUntranslated = true` に設定すると、翻訳されなかったテキストが
 `BepInEx/LogOutput.log` に `[未翻訳]` タグ付きで出力される。
 
