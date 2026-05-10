@@ -8,7 +8,7 @@
     <AssemblyName>REPOJapaneseTranslation</AssemblyName>
     <Product>REPO Japanese Translation</Product>
     <Description>Japanese localization mod for R.E.P.O.</Description>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Authors>saitogo</Authors>
     <RootNamespace>REPOJapaneseTranslation</RootNamespace>
 

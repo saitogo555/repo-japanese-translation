@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.0.4
+
+### Added
+
+- サーバー一覧画面など、メニューPrefabの初期テキストとして保持される見出しを翻訳するパッチを追加
+- サーバー参加確認ポップアップ用の翻訳を追加
+- `YEP!`、`NOPE!`、`Join Server` の翻訳を追加
+- トラック画面のテキスト（`STARTING ENGINE`、`HITTING THE ROAD`、`DESTROYING SLACKERS`）の翻訳を追加
+- `TruckScreenPatches.cs` を追加: `TruckScreenText.UpdateTaxmanNickname` と `TuckScreenLocked.LockChatToggle` へのHarmonyパッチ
+
+### Changed
+
+- TMP汎用パッチとメニュー専用パッチをファイル分割して整理
+- TMP汎用パッチのファイル名を `TMPTextTranslationPatch.cs` に変更
+- メニュー生成直後のページ配下TMPにも日本語フォントフォールバックを適用するように変更
+
+### Fixed
+
+- `PUBLIC GAME` と `SERVER LIST` のオレンジ色見出しが翻訳されない問題を修正
+- `TMP_Text.OnEnable` を対象にした不正なHarmonyパッチで起動時エラーが出る問題を修正
+- トラック画面の `TAXMAN:` ラベルが翻訳されない問題を修正
+- トラック画面の `STARTING ENGINE...` 等がリッチテキストとアニメーション付きドットが混在するため翻訳されない問題を修正
+- セーブデータ選択画面の "TOTAL HAUL:" が翻訳されない問題を修正
+
 ## v1.0.3
 
 ### Fixed

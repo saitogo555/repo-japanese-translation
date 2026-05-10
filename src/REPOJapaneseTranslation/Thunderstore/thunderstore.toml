@@ -5,10 +5,10 @@ schemaVersion = "0.0.1"
 repository = "https://thunderstore.io"
 
 [package]
-versionNumber = "1.0.3"
+versionNumber = "1.0.4"
 namespace = "saitogo"
 name = "REPOJapaneseTranslation"
-description = "R.E.P.O.の日本語化Modです。ゲーム内テキストを日本語に翻訳します。"
+description = "GameVersion v0.4.1対応 - R.E.P.O.の日本語化Modです。ゲーム内テキストを日本語に翻訳します。"
 websiteUrl = "https://github.com/saitogo555/repo-japanese-translation"
 containsNsfwContent = false
 
@@ -43,4 +43,4 @@ target = "/"
 [publish]
 communities = ["repo"]
 [publish.categories]
-repo = ["mods","misc", "clientside"]
+repo = ["mods","misc", "clientside", "ai-generated"]
