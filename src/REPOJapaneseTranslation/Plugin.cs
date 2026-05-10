@@ -50,8 +50,9 @@ public class Plugin : BaseUnityPlugin
         TranslationManager.Initialize();
         FontManager.Initialize(Info.Location);
 
-        _harmony.PatchAll(typeof(TextTranslationPatch));
-        _harmony.PatchAll(typeof(TMPFontPatch));
+        // このアセンブリ内の HarmonyPatch 属性付きクラスをまとめて登録します。
+        // パッチ追加時に Plugin.cs 側の登録漏れを起こしにくくするためです。
+        _harmony.PatchAll(typeof(TMPTextTranslationPatch).Assembly);
 
         Logger.LogInfo($"{MyPluginInfo.PLUGIN_NAME} v{MyPluginInfo.PLUGIN_VERSION} が読み込まれました！");
         Logger.LogInfo($"翻訳エントリ数: {TranslationManager.TranslationCount}");

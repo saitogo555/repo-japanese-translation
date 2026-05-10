@@ -100,7 +100,7 @@ internal static class TranslationManager
     /// <summary>
     /// 英語テキストを日本語に変換します。翻訳がない場合は元のテキストを返します。
     /// </summary>
-    internal static string Translate(string text)
+    internal static string Translate(string text, bool logUntranslated = true)
     {
         if (!Plugin.EnableTranslation.Value || string.IsNullOrEmpty(text))
             return text;
@@ -112,7 +112,7 @@ internal static class TranslationManager
         if (TryTranslateCore(coreText, out string result))
             return leadingWhitespace + result + trailingWhitespace;
 
-        if (Plugin.LogUntranslated.Value)
+        if (logUntranslated && Plugin.LogUntranslated.Value)
             Plugin.Logger.LogDebug($"[未翻訳] \"{text.Replace("\n", "\\n")}\"");
 
         return text;

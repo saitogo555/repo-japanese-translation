@@ -75,9 +75,25 @@ internal static class FontManager
         if (s_japaneseFontAsset == null) return;
 
         TMP_Text[] allTexts = UnityEngine.Object.FindObjectsOfType<TMP_Text>(includeInactive: true);
+        int patched = ApplyFallbackToTextComponents(allTexts);
+
+        if (patched > 0)
+            Plugin.Logger.LogDebug($"{patched} 個のフォントアセットにフォールバックを適用しました。");
+    }
+
+    /// <summary>
+    /// 指定された TMP_Text 群が使用するフォントアセットに、日本語フォントをフォールバックとして追加します。
+    /// </summary>
+    internal static int ApplyFallbackToTextComponents(IEnumerable<TMP_Text> texts)
+    {
+        if (s_japaneseFontAsset == null)
+            return 0;
+
+        // 同じ TMP フォントを複数ラベルが共有しているため、テキスト単位ではなく
+        // フォントアセット単位で適用済み判定を行います。
         int patched = 0;
 
-        foreach (TMP_Text tmpText in allTexts)
+        foreach (TMP_Text tmpText in texts)
         {
             if (tmpText.font == null) continue;
             if (s_patchedFonts.Contains(tmpText.font)) continue;
@@ -90,8 +106,7 @@ internal static class FontManager
             }
         }
 
-        if (patched > 0)
-            Plugin.Logger.LogDebug($"{patched} 個のフォントアセットにフォールバックを適用しました。");
+        return patched;
     }
 
     private static void PatchFontEngine()

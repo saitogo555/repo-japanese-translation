@@ -11,7 +11,7 @@ namespace REPOJapaneseTranslation.Patches;
 /// 英語テキストを日本語に翻訳します。
 /// </summary>
 [HarmonyPatch]
-internal static class TextTranslationPatch
+internal static class TMPTextTranslationPatch
 {
     /// <summary>
     /// text プロパティセッターと SetText 系メソッドを翻訳対象に含めます。
