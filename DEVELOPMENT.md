@@ -46,12 +46,6 @@
 │           └── StandaloneWindows64\
 │               ├── localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle
 │               └── *.bundle
-└── BepInEx\
-    └── plugins\
-        └── REPOJapaneseTranslation\
-            ├── REPOJapaneseTranslation.dll
-            └── fonts\
-                └── NotoSansJP-Regular-subset.ttf
 ```
 
 ### 主要ファイル
@@ -522,6 +516,57 @@ Are you sure you want to join
 `logUntranslated` 引数を追加しました。ページ走査時は `false` を渡し、
 通常の TMP 更新パッチでは従来どおり未翻訳ログを出すようにしています。
 
+### 10. トラック画面の "TAXMAN:" ラベルと "STARTING ENGINE..." が翻訳されない
+
+**問題**  
+トラック画面（サービスステーション兼チャット端末）の Taxman 名ラベルと、ゲーム開始時のロック状態テキストが英語のまま残りました。
+
+**原因（Taxman ラベル）**  
+`TruckScreenText.UpdateTaxmanNickname(string newName)` が Unity Localization から "Taxman" を受け取り、
+以下のようにリッチテキストタグで包んで `nicknameTaxman` フィールドに格納します。
+
+```csharp
+nicknameTaxman = "\n\n<color=#4d0000ff><b>" + newName + ":</b></color>\n";
+```
+
+その後 `textMesh.text += currentNickname` でダイアログ全体テキストに逐次結合されるため、
+TMP setter パッチは複合テキスト全体を受け取ってしまいキー照合できません。
+
+**原因（STARTING ENGINE 等）**  
+`TuckScreenLocked.LockChatToggle()` が `lockedText` フィールドに格納後、
+`Update()` で毎フレーム `lockedText + <color=...>.</color>...` というアニメーション付き文字列を TMP にセットします。
+ドットがカラータグの間に挟まるためリッチテキストサフィックス正規表現が分割できず、翻訳不可でした。
+
+**対応**  
+`TruckScreenPatches.cs` を新規追加し、以下 2 つの Prefix パッチを追加しました。
+
+- `TruckScreenText.UpdateTaxmanNickname` Prefix: リッチテキスト組み立て前に `newName` を翻訳
+- `TuckScreenLocked.LockChatToggle` Prefix: フィールド格納前に `_lockedText` を翻訳
+
+あわせて `ja.json` に `"STARTING ENGINE"`、`"HITTING THE ROAD"`、`"DESTROYING SLACKERS"` を追加しました。
+`"Taxman"` は既存エントリ `"Taxman": "税金マン"` が使われます。
+
+### 11. セーブデータ選択画面の "TOTAL HAUL:" が翻訳されない
+
+**問題**  
+セーブデータを選択したときの詳細パネルに表示される "TOTAL HAUL:" ラベルが英語のまま残りました。
+
+**原因**  
+`MenuPageSaves.SaveFileSelected` が Unity Localization から "Total Haul:" を取得し、
+前後にリッチテキストタグと数値を結合して `saveFileInfoRow2.text` に一括セットします。
+
+```csharp
+string text6 = localizedTotalHaul?.GetLocalizedString() ?? "Total Haul:";
+saveFileInfoRow2.text = "<color=#336680><sprite name=$$$> " + text6 + "      $ <color=white><b>" + text5 + "</b></color>k</color>";
+```
+
+TMP setter パッチはこの複合文字列全体を受け取り、辞書の `"Total Haul:"` とは一致しません。
+`ja.json` には `"Total Haul:": "総回収額:"` が既に登録されていましたが、照合に届いていませんでした。
+
+**対応**  
+`MenuTranslationPatches.cs` に `MenuPageSaves.SaveFileSelected` の Postfix パッチを追加し、
+メソッド実行後に `saveFileInfoRow2.text` 内の `"Total Haul:"` を `TranslationManager.Translate` の結果で部分置換しています。
+
 ## 8. ファイル構成
 
 ```text
@@ -529,7 +574,7 @@ Are you sure you want to join
 ├── build.sh
 └── src/
     └── REPOJapaneseTranslation/
-        ├── MyPluginInfo.cs
+        ├── PluginInfo.cs
         ├── REPOJapaneseTranslation.csproj
         ├── Plugin.cs
         ├── config/
@@ -542,6 +587,7 @@ Are you sure you want to join
         ├── Patches/
         │   ├── MenuTranslationPatches.cs
         │   ├── TMPTextTranslationPatch.cs
+        │   ├── TruckScreenPatches.cs
         │   └── TMPFontPatch.cs
         └── translations/
             └── ja.json
@@ -557,7 +603,7 @@ Are you sure you want to join
   - `LogUntranslated` (bool, default: false)
 - `LogUntranslated = true` のときにデバッグモード有効ログを出力
 
-#### `MyPluginInfo.cs`
+#### `PluginInfo.cs`
 - プラグイン GUID、表示名、バージョンをソースコード上で定義
 - Release / Debug の生成キャッシュに依存せず、同じ版数を確実に埋め込む
 
@@ -584,6 +630,12 @@ Are you sure you want to join
 - `MenuManager.PageOpen(...)` / `MenuPage.Start` 後にページ配下の初期TMPテキストを翻訳
 - `MenuButton.buttonTextString` を翻訳
 - `MenuManager.PagePopUp(...)` / `PagePopUpTwoOptions(...)` の文字列引数を翻訳
+- `MenuPageSaves.SaveFileSelected` Postfix でセーブ画面の "Total Haul:" 部分置換を実施
+
+#### `TruckScreenPatches.cs`
+- トラック画面（`TruckScreenText`、`TuckScreenLocked`）専用のHarmonyパッチ
+- `TruckScreenText.UpdateTaxmanNickname` の `newName` をリッチテキスト組み立て前に翻訳する Prefix パッチ
+- `TuckScreenLocked.LockChatToggle` の `_lockedText` をフィールド格納前に翻訳する Prefix パッチ
 
 #### `TMPFontPatch.cs`
 - シーン読み込み後にフォントフォールバックを再適用
