@@ -7,10 +7,10 @@ using REPOJapaneseTranslation.Patches;
 
 namespace REPOJapaneseTranslation;
 
-[BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+[BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
 public class Plugin : BaseUnityPlugin
 {
-    private readonly Harmony _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+    private readonly Harmony _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
 
     public static Plugin Instance { get; private set; } = null!;
     public static new ManualLogSource Logger { get; private set; } = null!;
@@ -54,7 +54,7 @@ public class Plugin : BaseUnityPlugin
         // パッチ追加時に Plugin.cs 側の登録漏れを起こしにくくするためです。
         _harmony.PatchAll(typeof(TMPTextTranslationPatch).Assembly);
 
-        Logger.LogInfo($"{MyPluginInfo.PLUGIN_NAME} v{MyPluginInfo.PLUGIN_VERSION} が読み込まれました！");
+        Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} v{PluginInfo.PLUGIN_VERSION} が読み込まれました！");
         Logger.LogInfo($"翻訳エントリ数: {TranslationManager.TranslationCount}");
     }
 }
