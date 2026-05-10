@@ -5,19 +5,19 @@ using TMPro;
 namespace REPOJapaneseTranslation.Patches;
 
 /// <summary>
-/// メニューページ生成後に、Prefab 初期値として既に入っている TMP テキストを翻訳します。
+/// メニューページ生成後に、Prefab初期値として既に入っているTMPテキストを翻訳します。
 /// </summary>
 internal static class MenuPageTranslator
 {
     /// <summary>
-    /// 指定されたメニューページ配下の TMP テキストとヘッダー名を翻訳します。
+    /// 指定されたメニューページ配下のTMPテキストとヘッダー名を翻訳します。
     /// </summary>
     internal static void TranslatePage(MenuPage? menuPage)
     {
         if (menuPage == null)
             return;
 
-        // ページ Prefab のヘッダーは PageOpen の戻り時点ですでに設定済みで、
+        // ページPrefabのヘッダーはPageOpenの戻り時点ですでに設定済みで、
         // TMP_Text.text / SetText パッチを通らないため、現在値を直接翻訳します。
         menuPage.menuHeaderName = TranslationManager.Translate(menuPage.menuHeaderName, logUntranslated: false);
 
@@ -120,5 +120,33 @@ internal static class MenuTwoOptionPopUpTranslationPatch
         popUpText = TranslationManager.Translate(popUpText);
         option1Text = TranslationManager.Translate(option1Text);
         option2Text = TranslationManager.Translate(option2Text);
+    }
+}
+
+/// <summary>
+/// セーブデータ選択画面の "Total Haul:" ラベルを翻訳します。
+/// <para>
+/// </summary>
+[HarmonyPatch(typeof(MenuPageSaves), nameof(MenuPageSaves.SaveFileSelected))]
+internal static class MenuPageSavesSaveFileSelectedPatch
+{
+    [HarmonyPostfix]
+    private static void Postfix(MenuPageSaves __instance)
+    {
+        if (__instance.saveFileInfoRow2 == null)
+            return;
+
+        string current = __instance.saveFileInfoRow2.text;
+        if (!current.Contains("Total Haul:"))
+            return;
+
+        string translated = TranslationManager.Translate("Total Haul:", logUntranslated: false);
+        if (translated == "Total Haul:")
+            return;
+
+        // TMP setter を経由せず backing field ではなくプロパティにセットすると
+        // 再度 TranslationManager.Translate が呼ばれるが、日本語を含む複合
+        // リッチテキストは辞書にないため変換されずそのまま返る。
+        __instance.saveFileInfoRow2.text = current.Replace("Total Haul:", translated);
     }
 }

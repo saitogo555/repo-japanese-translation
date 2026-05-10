@@ -7,14 +7,13 @@ using TMPro;
 namespace REPOJapaneseTranslation.Patches;
 
 /// <summary>
-/// TMP_Text の主要な文字列更新経路にパッチを当て、
-/// 英語テキストを日本語に翻訳します。
+/// TMP_Text の主要な文字列更新経路にパッチを当て、英語テキストを日本語に翻訳します。
 /// </summary>
 [HarmonyPatch]
 internal static class TMPTextTranslationPatch
 {
     /// <summary>
-    /// text プロパティセッターと SetText 系メソッドを翻訳対象に含めます。
+    /// text プロパティセッターとSetText系メソッドを翻訳対象に含めます。
     /// </summary>
     [HarmonyTargetMethods]
     private static IEnumerable<MethodBase> TargetMethods()
