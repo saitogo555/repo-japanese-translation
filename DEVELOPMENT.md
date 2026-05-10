@@ -25,16 +25,16 @@
 | Unity バージョン | 2022.3.67f2 |
 | BepInEx | 5.4.23.5 |
 | TextMeshPro | 3.0.7 |
-| 翻訳エントリ数 | 652件 |
+| 翻訳エントリ数 | 660件 |
 
 ## 2. 調査対象ファイル
 
 ### ゲームインストールフォルダ構造
 
-以下はインストール先の例です。環境によってディレクトリ構成は異なるため、実際のゲーム保存先に読み替えてください。
+以下はゲームフォルダを `<GAME_DIR>` とした相対的な構成例です。Steam のインストール先や Mod Manager のプロファイル場所は環境ごとに異なるため、実際の保存先に読み替えてください。
 
 ```text
-<GAME_INSTALL_DIR>\
+<GAME_DIR>\
 ├── REPO.exe
 ├── REPO_Data\
 │   ├── Managed\
@@ -65,7 +65,7 @@
   - セーブ / ロード関連の文字列群
 
 ```bash
-strings REPO_Data/Managed/Assembly-CSharp.dll | grep -i "locali\|translate\|toupper"
+strings <GAME_DIR>/REPO_Data/Managed/Assembly-CSharp.dll | grep -i "locali\|translate\|toupper"
 ```
 
 #### `localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle`
@@ -123,6 +123,17 @@ someLabel.SetText("Settings");
 ```bash
 strings Assembly-CSharp.dll | grep -i "toupper"
 ```
+
+### Prefab 初期値として入っているメニュー見出し
+
+`PUBLIC GAME` や `SERVER LIST` のようなオレンジ色のメニュー見出しは、
+`TMP_Text.text` セッターや `TMP_Text.SetText(...)` で実行時に代入される文字列ではありませんでした。
+
+`Assembly-CSharp.dll` を確認すると、メニューページは `MenuManager.PageOpen(...)` で Prefab から生成され、
+その時点で `MenuPage.menuHeader` の `TMP_Text.text` には Prefab 初期値が既に入っています。
+
+そのため、この種類の文字列は「代入の瞬間を Harmony で捕捉する」方法だけでは翻訳できません。
+ページ生成後に `MenuPage` 配下の `TMP_Text` を走査し、現在値を翻訳し直す必要があります。
 
 ## 4. 翻訳システムの設計
 
@@ -183,7 +194,7 @@ private static readonly Regex s_actionSuffixRegex = new(
 
 ### Harmony パッチ
 
-`src/REPOJapaneseTranslation/Patches/TextTranslationPatch.cs`
+`src/REPOJapaneseTranslation/Patches/TMPTextTranslationPatch.cs`
 
 ```csharp
 [HarmonyTargetMethods]
@@ -210,6 +221,25 @@ private static void TranslateText(ref string __0)
     __0 = TranslationManager.Translate(__0);
 }
 ```
+
+`src/REPOJapaneseTranslation/Patches/MenuTranslationPatches.cs`
+
+メニュー系 UI には、TMP 更新経路とは別に、ゲーム独自の文字列保持フィールドがあります。
+そのため、次の専用パッチを分離して管理しています。
+
+- `MenuPageOpenTranslationPatch`
+  - `MenuManager.PageOpen(MenuPageIndex, bool)` の戻り値である `MenuPage` を受け取り、ページ配下の既存 `TMP_Text` を翻訳
+- `MenuPageStartTranslationPatch`
+  - `MenuPage.Start` 後にも同じ走査を実行し、ページ生成後に初期化される値を拾う
+- `MenuButtonTranslationPatch`
+  - `MenuButton.buttonTextString` を翻訳し、毎フレーム表示文字列を戻す処理に対応
+- `MenuPopUpTranslationPatch`
+  - `MenuManager.PagePopUp(...)` の引数を翻訳
+- `MenuTwoOptionPopUpTranslationPatch`
+  - `MenuManager.PagePopUpTwoOptions(...)` の見出し、本文、選択肢を翻訳
+
+ページ配下の走査ではサーバー名などのユーザー入力文字列も見えるため、
+`TranslationManager.Translate(..., logUntranslated: false)` を使って未翻訳ログを抑制しています。
 
 ## 5. フォント処理の調査と対応
 
@@ -248,6 +278,21 @@ private static bool Prefix(Font font, int pointSize, ref FontEngineError __resul
 TextMeshPro による動的グリフ追加時にも同じフォントデータを使えます。
 
 その結果、ひらがな・カタカナ・漢字を含む日本語表示を安定して扱えるようになりました。
+
+### TTF ファイルと翻訳処理の関係
+
+翻訳処理自体は文字列置換なので、`NotoSansJP-Regular-subset.ttf` が無くても動作します。
+ただし、日本語が表示できるかどうかは、対象の TMP フォントアセットまたは TMP フォールバックに
+日本語グリフが存在するかに依存します。
+
+TTF 無しでも日本語が表示される場合は、次のいずれかが起きています。
+
+- ゲーム側の対象フォントアセットが既に日本語グリフを持っている
+- TMP のグローバルフォールバックに日本語表示可能なフォントがある
+- 別Modや実行環境側がフォントフォールバックを追加している
+
+同梱 TTF は、環境差や画面ごとのフォント差で豆腐文字や欠落が出ることを避けるための保険です。
+確認済みの画面で不要に見えても、配布物から削除するのは非推奨です。
 
 ## 6. 翻訳エントリの収集方法
 
@@ -422,6 +467,61 @@ Harmony パッチの対象を `TMP_Text.text` セッターに加えて、
 第1引数が `string` の `TMP_Text.SetText(...)` オーバーロード全体へ拡張しました。
 あわせて、`FOCUS > ...` のような接頭辞付き表示や、sprite を伴う表示は本体側を分解して翻訳する経路を追加しました。
 
+### 7. メニューPrefab初期値の見出しが翻訳されない
+
+**問題**  
+`PUBLIC GAME` と `SERVER LIST` のオレンジ色見出しが、辞書に対応キーがあっても英語のまま残りました。
+
+**原因**  
+これらはページPrefabの `MenuPage.menuHeader` に初期値として入っており、
+`MenuManager.PageOpen(...)` で生成された時点ですでに `TMP_Text.text` に存在していました。
+そのため、`TMP_Text.text` セッターや `SetText(...)` のパッチでは捕捉できませんでした。
+
+一度 `TMP_Text.OnEnable` を対象にする案も試しましたが、R.E.P.O. 同梱の TextMeshPro では
+Harmony が対象メソッドを見つけられず、起動時に `Undefined target method` 例外が発生しました。
+
+**対応**  
+`TMP_Text.OnEnable` パッチは採用せず、`MenuManager.PageOpen(...)` 後と `MenuPage.Start` 後に
+`MenuPage` 配下の `TMP_Text` を `GetComponentsInChildren<TMP_Text>(includeInactive: true)` で走査し、
+既に入っている現在値を翻訳する方式に変更しました。
+
+この方式により、`Public Game` / `Server List` の大文字フォールバックが適用され、
+実表示の `PUBLIC GAME` / `SERVER LIST` も翻訳されます。
+
+### 8. サーバー参加確認ポップアップが翻訳されない
+
+**問題**  
+サーバー一覧から部屋を選択したときの `JOIN SERVER`、`Are you sure you want to join ...`、
+`YEP!`、`NOPE!` が英語のまま残りました。
+
+**原因**  
+サーバー参加確認文は `MenuPageServerList.CreateServerElement(...)` 内で、
+部屋名を含む動的文字列として `MenuButtonPopUp.bodyText` に設定されていました。
+
+```text
+Are you sure you want to join
+''{server name}''
+```
+
+また、選択肢テキストは `MenuManager.PagePopUpTwoOptions(...)` の引数や
+`MenuButton.buttonTextString` を経由します。
+
+**対応**  
+`MenuManager.PagePopUpTwoOptions(...)` の引数を翻訳し、辞書には
+`Are you sure you want to join\n''{server}''` 形式のテンプレートを追加しました。
+あわせて `Join Server`、`YEP!`、`NOPE!` を追加しました。
+
+### 9. 未翻訳ログがサーバー名で埋まる
+
+**問題**  
+ページ配下の `TMP_Text` をまとめて走査すると、サーバー名やユーザー入力文字列も翻訳候補になります。
+`LogUntranslated = true` の状態では、意図的に翻訳しない文字列までログに大量出力される可能性があります。
+
+**対応**  
+`TranslationManager.Translate(string text, bool logUntranslated = true)` に
+`logUntranslated` 引数を追加しました。ページ走査時は `false` を渡し、
+通常の TMP 更新パッチでは従来どおり未翻訳ログを出すようにしています。
+
 ## 8. ファイル構成
 
 ```text
@@ -440,7 +540,8 @@ Harmony パッチの対象を `TMP_Text.text` セッターに加えて、
         │   ├── TranslationManager.cs
         │   └── FontManager.cs
         ├── Patches/
-        │   ├── TextTranslationPatch.cs
+        │   ├── MenuTranslationPatches.cs
+        │   ├── TMPTextTranslationPatch.cs
         │   └── TMPFontPatch.cs
         └── translations/
             └── ja.json
@@ -471,11 +572,18 @@ Harmony パッチの対象を `TMP_Text.text` セッターに加えて、
 - 同梱 TTF から TMP FontAsset を動的生成
 - `FontEngine.LoadFontFace(Font, int)` をバイト列経由へリダイレクト
 - 全 TMP テキストコンポーネントへ日本語フォールバックを追加
+- メニュー生成直後のページ配下 TMP へも日本語フォールバックを追加
 - パッチの二重適用を避けつつ、失敗時はダミー `Font` をクリーンアップ
 
-#### `TextTranslationPatch.cs`
+#### `TMPTextTranslationPatch.cs`
 - `TMP_Text.text` セッターと `TMP_Text.SetText(...)` への Harmony パッチ
 - テキスト更新時に `TranslationManager.Translate()` を呼ぶ
+
+#### `MenuTranslationPatches.cs`
+- メニュー専用の Harmony パッチを集約
+- `MenuManager.PageOpen(...)` / `MenuPage.Start` 後にページ配下の初期TMPテキストを翻訳
+- `MenuButton.buttonTextString` を翻訳
+- `MenuManager.PagePopUp(...)` / `PagePopUpTwoOptions(...)` の文字列引数を翻訳
 
 #### `TMPFontPatch.cs`
 - シーン読み込み後にフォントフォールバックを再適用
@@ -501,7 +609,7 @@ Harmony パッチの対象を `TMP_Text.text` セッターに加えて、
 ### ビルド
 
 ```bash
-cd /path/to/repo-jp-lang
+cd <REPO_DIR>
 dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
 # または
 bash build.sh
@@ -523,20 +631,28 @@ src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.d
 
 ### デプロイ
 
-生成した DLL とフォントファイルを、ゲーム環境にコピーします。
+生成した DLL とフォントファイルを、導入先の BepInEx plugins フォルダへコピーします。
+
+ここでは次のプレースホルダを使います。
+
+- `<REPO_DIR>`: このリポジトリのルート
+- `<GAME_DIR>`: R.E.P.O. のゲームインストールフォルダ
+- `<PROFILE_BEPINEX_DIR>`: Thunderstore Mod Manager / r2modman などの対象プロファイル内にある `BepInEx` フォルダ
 
 ```bash
-# ゲームルート
-cp src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll \
-    "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseTranslation/"
-cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
-    "G:/Steam/steamapps/common/REPO/BepInEx/plugins/REPOJapaneseTranslation/fonts/"
+# ゲームフォルダへ直接導入する場合
+mkdir -p "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation"
+cp "<REPO_DIR>/src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
+    "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation/"
+cp "<REPO_DIR>/src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf" \
+    "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation/"
 
-# Thunderstore Mod Manager プロファイル
-cp src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll \
-    "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseTranslation/"
-cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
-    "C:/Users/{ユーザー}/AppData/Roaming/Thunderstore Mod Manager/DataFolder/REPO/profiles/Default/BepInEx/plugins/REPOJapaneseTranslation/fonts/"
+# Mod Manager のプロファイルへ導入する場合
+mkdir -p "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation"
+cp "<REPO_DIR>/src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
+    "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation/"
+cp "<REPO_DIR>/src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf" \
+    "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation/"
 ```
 
 ### 翻訳更新
