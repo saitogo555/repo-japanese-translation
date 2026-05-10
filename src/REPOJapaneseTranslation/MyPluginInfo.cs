@@ -4,5 +4,5 @@ internal static class MyPluginInfo
 {
     public const string PLUGIN_GUID = "REPOJapaneseTranslation";
     public const string PLUGIN_NAME = "REPO Japanese Translation";
-    public const string PLUGIN_VERSION = "1.0.2";
+    public const string PLUGIN_VERSION = "1.0.3";
 }

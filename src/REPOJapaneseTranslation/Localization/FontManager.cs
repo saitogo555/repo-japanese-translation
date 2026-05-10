@@ -18,7 +18,6 @@ namespace REPOJapaneseTranslation.Localization;
 internal static class FontManager
 {
     private const string TtfFileName = "NotoSansJP-Regular-subset.ttf";
-    private const string FontsFolderName = "fonts";
 
     // ダミー Font オブジェクト → TTF バイト列。
     private static readonly Dictionary<Font, byte[]> SystemFontMap = new();
@@ -38,12 +37,12 @@ internal static class FontManager
         try
         {
             string pluginDir = Path.GetDirectoryName(pluginLocation) ?? string.Empty;
-            string ttfPath = Path.Combine(pluginDir, FontsFolderName, TtfFileName);
+            string ttfPath = Path.Combine(pluginDir, TtfFileName);
 
             if (!File.Exists(ttfPath))
             {
                 Plugin.Logger.LogWarning($"日本語フォントファイルが見つかりません: {ttfPath}");
-                Plugin.Logger.LogWarning($"plugins/REPOJapaneseTranslation/{FontsFolderName}/{TtfFileName} を配置してください。");
+                Plugin.Logger.LogWarning($"plugins/REPOJapaneseTranslation/{TtfFileName} を配置してください。");
                 return;
             }
 
