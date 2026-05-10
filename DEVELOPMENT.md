@@ -24,7 +24,6 @@
 | ゲーム | R.E.P.O. (Steam App ID: 3241660) |
 | Unity バージョン | 2022.3.67f2 |
 | BepInEx | 5.4.23.5 |
-| REPOLib | 4.0.0 |
 | TextMeshPro | 3.0.7 |
 | 翻訳エントリ数 | 652件 |
 
@@ -334,10 +333,10 @@ Mod 側のクラス名を `TranslationManager` に変更しました。
 ### 2. NuGet パッケージのバージョン衝突
 
 **問題**  
-`Newtonsoft.Json` を最新版で追加すると、REPOLib と整合しない構成になり、クラッシュが発生しました。
+`Newtonsoft.Json` のバージョンを不用意に上げると、実行環境側の依存関係と整合しない構成になり、クラッシュする可能性があります。
 
 **対応**  
-REPOLib v4.0.0 に合わせて `13.0.4` を使用しました。
+動作確認済みの `13.0.4` を使用しました。
 
 ```xml
 <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -552,7 +551,6 @@ cp src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf \
 
 ## 参考リンク
 
-- [REPOLib GitHub](https://github.com/ZehsTeam/REPOLib)
 - [BepInEx 5 ドキュメント](https://docs.bepinex.dev/articles/user_guide/installation/index.html)
 - [HarmonyX ドキュメント](https://harmony.pardeike.net/articles/intro.html)
 - [TextMeshPro ドキュメント](https://docs.unity3d.com/Packages/com.unity.textmeshpro@3.0/manual/index.html)
