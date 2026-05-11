@@ -16,28 +16,28 @@ containsNsfwContent = false
 BepInEx-BepInExPack = "5.4.2305"
 
 [build]
-icon = "../../../icon.png"
-readme = "../../../README.md"
-outdir = "../../../artifacts/thunderstore/"
+icon = "../../icon.png"
+readme = "../../README.md"
+outdir = "../../artifacts/thunderstore/"
 
 [[build.copy]]
-source = "../../../src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll"
+source = "../bin/Release/netstandard2.1/REPOJapaneseTranslation.dll"
 target = "/"
 
 [[build.copy]]
-source = "../../../src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf"
+source = "../fonts/NotoSansJP-Regular-subset.ttf"
 target = "/"
 
 [[build.copy]]
-source = "../../../src/REPOJapaneseTranslation/config/REPOJapaneseTranslation.cfg"
+source = "../config/REPOJapaneseTranslation.cfg"
 target = "/"
 
 [[build.copy]]
-source = "../../../CHANGELOG.md"
+source = "../../CHANGELOG.md"
 target = "/"
 
 [[build.copy]]
-source = "../../../LICENSE"
+source = "../../LICENSE"
 target = "/"
 
 [publish]

@@ -146,7 +146,7 @@ strings Assembly-CSharp.dll | grep -i "toupper"
 
 ### `TranslationManager` の役割
 
-`src/REPOJapaneseTranslation/Localization/TranslationManager.cs`
+`src/Localization/TranslationManager.cs`
 
 起動時に組み込みリソース `translations/ja.json` を読み込み、
 原文キーと正規化済みキーを辞書として保持します。現在は通常の辞書検索に加えて、
@@ -188,7 +188,7 @@ private static readonly Regex s_actionSuffixRegex = new(
 
 ### Harmony パッチ
 
-`src/REPOJapaneseTranslation/Patches/TMPTextTranslationPatch.cs`
+`src/Patches/TMPTextTranslationPatch.cs`
 
 ```csharp
 [HarmonyTargetMethods]
@@ -216,7 +216,7 @@ private static void TranslateText(ref string __0)
 }
 ```
 
-`src/REPOJapaneseTranslation/Patches/MenuTranslationPatches.cs`
+`src/Patches/MenuTranslationPatches.cs`
 
 メニュー系 UI には、TMP 更新経路とは別に、ゲーム独自の文字列保持フィールドがあります。
 そのため、次の専用パッチを分離して管理しています。
@@ -573,24 +573,23 @@ TMP setter パッチはこの複合文字列全体を受け取り、辞書の `"
 .
 ├── build.sh
 └── src/
-    └── REPOJapaneseTranslation/
-        ├── PluginInfo.cs
-        ├── REPOJapaneseTranslation.csproj
-        ├── Plugin.cs
-        ├── config/
-        │   └── REPOJapaneseTranslation.cfg
-        ├── fonts/
-        │   └── NotoSansJP-Regular-subset.ttf
-        ├── Localization/
-        │   ├── TranslationManager.cs
-        │   └── FontManager.cs
-        ├── Patches/
-        │   ├── MenuTranslationPatches.cs
-        │   ├── TMPTextTranslationPatch.cs
-        │   ├── TruckScreenPatches.cs
-        │   └── TMPFontPatch.cs
-        └── translations/
-            └── ja.json
+    ├── PluginInfo.cs
+    ├── REPOJapaneseTranslation.csproj
+    ├── Plugin.cs
+    ├── config/
+    │   └── REPOJapaneseTranslation.cfg
+    ├── fonts/
+    │   └── NotoSansJP-Regular-subset.ttf
+    ├── Localization/
+    │   ├── TranslationManager.cs
+    │   └── FontManager.cs
+    ├── Patches/
+    │   ├── MenuTranslationPatches.cs
+    │   ├── TMPTextTranslationPatch.cs
+    │   ├── TruckScreenPatches.cs
+    │   └── TMPFontPatch.cs
+    └── translations/
+        └── ja.json
 ```
 
 ### 各ファイルの役割
@@ -649,7 +648,7 @@ TMP setter パッチはこの複合文字列全体を受け取り、辞書の `"
 
 #### `build.sh`
 - リポジトリルートから Release ビルドを実行する補助スクリプト
-- `dotnet clean` の後に `dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release` を実行
+- `dotnet clean` の後に `dotnet build src/REPOJapaneseTranslation.csproj -c Release` を実行
 
 ## 9. ビルドとデプロイ
 
@@ -662,7 +661,7 @@ TMP setter パッチはこの複合文字列全体を受け取り、辞書の `"
 
 ```bash
 cd <REPO_DIR>
-dotnet build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
+dotnet build src/REPOJapaneseTranslation.csproj -c Release
 # または
 bash build.sh
 ```
@@ -672,13 +671,13 @@ PATH に `dotnet` が通っていない環境では、次のように `DOTNET_RO
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"
 export PATH="$DOTNET_ROOT:$PATH"
-"$DOTNET_ROOT/dotnet" build src/REPOJapaneseTranslation/REPOJapaneseTranslation.csproj -c Release
+"$DOTNET_ROOT/dotnet" build src/REPOJapaneseTranslation.csproj -c Release
 ```
 
 生成物:
 
 ```text
-src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
+src/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
 ```
 
 ### デプロイ
@@ -694,23 +693,23 @@ src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.d
 ```bash
 # ゲームフォルダへ直接導入する場合
 mkdir -p "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation"
-cp "<REPO_DIR>/src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
+cp "<REPO_DIR>/src/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
     "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation/"
-cp "<REPO_DIR>/src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf" \
+cp "<REPO_DIR>/src/fonts/NotoSansJP-Regular-subset.ttf" \
     "<GAME_DIR>/BepInEx/plugins/REPOJapaneseTranslation/"
 
 # Mod Manager のプロファイルへ導入する場合
 mkdir -p "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation"
-cp "<REPO_DIR>/src/REPOJapaneseTranslation/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
+cp "<REPO_DIR>/src/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll" \
     "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation/"
-cp "<REPO_DIR>/src/REPOJapaneseTranslation/fonts/NotoSansJP-Regular-subset.ttf" \
+cp "<REPO_DIR>/src/fonts/NotoSansJP-Regular-subset.ttf" \
     "<PROFILE_BEPINEX_DIR>/plugins/REPOJapaneseTranslation/"
 ```
 
 ### 翻訳更新
 
 翻訳辞書は DLL に埋め込まれているため、
-`src/REPOJapaneseTranslation/translations/ja.json` を編集した後は再ビルドが必要です。
+`src/translations/ja.json` を編集した後は再ビルドが必要です。
 
 ### 未翻訳テキストの確認
 
