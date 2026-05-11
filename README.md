@@ -1,7 +1,9 @@
 # R.E.P.O. 日本語化Mod
 
-[![Game Version](https://img.shields.io/badge/Game%20Version-v0.4.1-5c7cfa?style=for-the-badge)](#)
+[![Game Version](https://img.shields.io/badge/Game%20Version-v0.4.1-5c7cfa?style=for-the-badge&logo=steam)](https://store.steampowered.com/app/3241660/REPO)
 [![Thunderstore Version](https://img.shields.io/thunderstore/v/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
+[![Thunderstore Downloads](https://img.shields.io/thunderstore/dt/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
+[![Thunderstore Likes](https://img.shields.io/thunderstore/likes/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
 
 R.E.P.O.のゲーム内テキストを日本語に翻訳するModです。
 
