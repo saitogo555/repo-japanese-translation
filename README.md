@@ -1,6 +1,6 @@
 # REPOJapaneseTranslation
 
-[![Game Version](https://img.shields.io/badge/Game%20Version-v0.4.2-5c7cfa?style=for-the-badge&logo=steam)](https://store.steampowered.com/app/3241660/REPO)
+[![Game Version](https://img.shields.io/badge/Game%20Version-v0.4.3-5c7cfa?style=for-the-badge&logo=steam)](https://store.steampowered.com/app/3241660/REPO)
 [![Thunderstore Version](https://img.shields.io/thunderstore/v/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
 [![Thunderstore Downloads](https://img.shields.io/thunderstore/dt/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
 [![Thunderstore Likes](https://img.shields.io/thunderstore/likes/saitogo/REPOJapaneseTranslation?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/saitogo/REPOJapaneseTranslation/)
@@ -83,14 +83,6 @@ Thunderstore Mod Managerは通常のゲームフォルダとは別に、プロ�
 
 ```bash
 bash build.sh
-# -> src/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
-```
-
-または
-
-```bash
-dotnet clean src/REPOJapaneseTranslation.csproj -c Release
-dotnet build src/REPOJapaneseTranslation.csproj -c Release
 # -> src/bin/Release/netstandard2.1/REPOJapaneseTranslation.dll
 ```
 
