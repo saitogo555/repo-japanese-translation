@@ -11,3 +11,6 @@ bin/
 
 # Thunderstore build output
 artifacts/
+
+# Cache files
+*.lscache
